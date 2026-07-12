@@ -1,0 +1,195 @@
+use anchor_lang::prelude::*;
+use anchor_lang::system_program;
+use crate::state::{
+    PollAccount,
+    UserAccount,
+    PlatformConfig,
+    POLL_CREATION_FEE,
+    MIN_UNIT_PRICE,
+    MIN_STANDARD_MARKET_DURATION,
+    MIN_LIVE_GOAL_MARKET_DURATION,
+    MARKET_KIND_STANDARD,
+    MARKET_KIND_LIVE_GOAL_WINDOW,
+};
+use crate::errors::InstinctFiError;
+use crate::events::PollCreatedEvent;
+
+/// Creates a new prediction poll with a real SOL investment.
+///
+/// Fee structure:
+///   Platform fee: 1% of investment (stays in treasury)
+///   Creator reward: 1% of investment (sent to creator on settlement)
+///   Pool seed: 98% of investment (distributed to winners)
+///
+/// The creator's SOL is transferred to the treasury PDA.
+///
+/// TODO (#48): Add a separate `withdraw_platform_fee` instruction so admin
+/// can withdraw accumulated platform fees from the treasury PDA. Currently
+/// these fees remain permanently locked. The instruction should:
+/// 1. Require admin signer
+/// 2. Calculate withdrawable amount (treasury balance - outstanding pool)
+/// 3. Transfer to admin wallet
+pub fn handler(
+    ctx: Context<CreatePoll>,
+    poll_id: u64,
+    title: String,
+    description: String,
+    category: String,
+    image_url: String,
+    options: Vec<String>,
+    unit_price: u64,
+    end_time: i64,
+    market_kind: u8,
+) -> Result<()> {
+    // ── Platform pause check ──
+    require!(!ctx.accounts.platform_config.paused, InstinctFiError::PlatformPaused);
+    require_keys_eq!(
+        ctx.accounts.creator.key(),
+        ctx.accounts.platform_config.admin,
+        InstinctFiError::Unauthorized
+    );
+
+    // ── Validate inputs ──
+    require!(title.len() <= 64, InstinctFiError::TitleTooLong);
+    require!(description.len() <= 256, InstinctFiError::DescriptionTooLong);
+    require!(category.len() <= 32, InstinctFiError::CategoryTooLong);
+    require!(image_url.len() <= 256, InstinctFiError::ImageUrlTooLong);
+    require!(options.len() >= 2 && options.len() <= 6, InstinctFiError::InvalidOptionCount);
+    for opt in &options {
+        require!(opt.len() <= 32, InstinctFiError::OptionLabelTooLong);
+        require!(!opt.trim().is_empty(), InstinctFiError::EmptyOptionLabel);
+    }
+    require!(unit_price > 0, InstinctFiError::InvalidUnitPrice);
+    require!(unit_price >= MIN_UNIT_PRICE, InstinctFiError::UnitPriceBelowMinimum);
+    require!(
+        market_kind == MARKET_KIND_STANDARD || market_kind == MARKET_KIND_LIVE_GOAL_WINDOW,
+        InstinctFiError::InvalidMarketKind
+    );
+
+    if market_kind == MARKET_KIND_LIVE_GOAL_WINDOW {
+        require!(
+            options.len() == 2
+                && options.get(0).map(|s| s.as_str()) == Some("NO")
+                && options.get(1).map(|s| s.as_str()) == Some("YES"),
+            InstinctFiError::InvalidLiveGoalOutcomes
+        );
+    }
+
+    let clock = Clock::get()?;
+    require!(end_time > clock.unix_timestamp, InstinctFiError::EndTimeInPast);
+    let duration = end_time - clock.unix_timestamp;
+    let min_duration = if market_kind == MARKET_KIND_LIVE_GOAL_WINDOW {
+        MIN_LIVE_GOAL_MARKET_DURATION
+    } else {
+        MIN_STANDARD_MARKET_DURATION
+    };
+    require!(duration >= min_duration, InstinctFiError::PollDurationTooShort);
+
+    // ── Transfer flat 0.5 SOL creation fee from creator → treasury PDA ──
+    system_program::transfer(
+        CpiContext::new(
+            ctx.accounts.system_program.to_account_info(),
+            system_program::Transfer {
+                from: ctx.accounts.creator.to_account_info(),
+                to: ctx.accounts.treasury.to_account_info(),
+            },
+        ),
+        POLL_CREATION_FEE,
+    )?;
+
+    // ── Initialize poll account ──
+    let poll = &mut ctx.accounts.poll_account;
+    let num_options = options.len();
+
+    poll.poll_id = poll_id;
+    poll.creator = ctx.accounts.creator.key();
+    poll.title = title;
+    poll.description = description;
+    poll.category = category;
+    poll.image_url = image_url;
+    poll.options = options;
+    poll.vote_counts = vec![0u64; num_options];
+    poll.unit_price = unit_price;
+    poll.end_time = end_time;
+    poll.total_pool = 0;  // pool starts at 0 — voters fill it entirely
+    poll.creator_investment = POLL_CREATION_FEE;
+    poll.platform_fee = POLL_CREATION_FEE;  // full creation fee goes to platform
+    poll.creator_reward = 0;  // computed at settlement (2% of voter pool)
+    poll.status = PollAccount::STATUS_ACTIVE;
+    poll.winning_option = 255;
+    poll.treasury_bump = ctx.bumps.treasury;
+    poll.bump = ctx.bumps.poll_account;
+    poll.total_voters = 0;
+    poll.created_at = clock.unix_timestamp;
+    poll.market_kind = market_kind;
+
+    // ── Update user stats ──
+    let user = &mut ctx.accounts.user_account;
+    user.total_polls_created = user.total_polls_created
+        .checked_add(1)
+        .ok_or(InstinctFiError::Overflow)?;
+
+    msg!(
+        "Poll {} created with {} options, treasury={}",
+        poll.poll_id,
+        num_options,
+        ctx.accounts.treasury.key()
+    );
+
+    emit!(PollCreatedEvent {
+        poll_id: poll.poll_id,
+        creator: ctx.accounts.creator.key(),
+        end_time: poll.end_time,
+        total_pool: 0,
+        num_options: num_options as u8,
+    });
+
+    Ok(())
+}
+
+// ─── Accounts ────────────────────────────────────────────────────────────────
+
+#[derive(Accounts)]
+#[instruction(poll_id: u64)]
+pub struct CreatePoll<'info> {
+    /// The poll creator (pays SOL investment + account rent)
+    #[account(mut)]
+    pub creator: Signer<'info>,
+
+    /// Creator's user profile
+    #[account(
+        mut,
+        seeds = [b"user", creator.key().as_ref()],
+        bump = user_account.bump,
+    )]
+    pub user_account: Account<'info, UserAccount>,
+
+    /// Poll PDA: seeds = ["poll", creator, poll_id]
+    #[account(
+        init,
+        payer = creator,
+        space = 8 + PollAccount::INIT_SPACE,
+        seeds = [b"poll", creator.key().as_ref(), &poll_id.to_le_bytes()],
+        bump,
+    )]
+    pub poll_account: Account<'info, PollAccount>,
+
+    /// Treasury PDA: holds real SOL for this poll
+    /// CHECK: This is a PDA vault that holds SOL — no data stored.
+    /// Validated by seeds constraint.
+    #[account(
+        mut,
+        seeds = [b"treasury", poll_account.key().as_ref()],
+        bump,
+    )]
+    pub treasury: UncheckedAccount<'info>,
+
+    /// Platform config — checked for pause state
+    #[account(
+        seeds = [b"platform_config"],
+        bump = platform_config.bump,
+    )]
+    pub platform_config: Account<'info, PlatformConfig>,
+
+    pub system_program: Program<'info, System>,
+}

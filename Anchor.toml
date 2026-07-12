@@ -1,0 +1,19 @@
+[features]
+seeds = false
+skip-lint = false
+
+[programs.localnet]
+instinctfi = "J9AqrLZWDXaQfDwtFpC2GG9hBb7SAPxRwVpGs753EgWV"
+
+[programs.devnet]
+instinctfi = "J9AqrLZWDXaQfDwtFpC2GG9hBb7SAPxRwVpGs753EgWV"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+cluster = "devnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
