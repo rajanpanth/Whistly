@@ -33,26 +33,60 @@ export const PRIMARY_MARKET_NAV = [
   { label: "Companies", href: "/events?category=companies" },
 ] as const;
 
-export const SPORT_TABS = ["All", "Soccer", "Live", "World Cup", "Goals", "Corners", "Cards", "Totals", "Match Result"] as const;
+export const SPORT_TABS = ["All markets", "Goals", "Corners", "Cards", "Penalties", "Offsides", "Totals", "Goal Gap", "Match Result", "Live 5m", "Live 15m", "Live 45m"] as const;
 
-export const FEATURED_MARKET: MarketplaceMarket = {
-  id: "featured-arg-bra",
-  title: "Argentina vs Brazil",
-  competition: "World Cup 2026 demo",
-  sport: "World Cup",
-  status: "upcoming",
-  countdown: "2d : 11h : 48m",
-  combo: true,
-  featured: true,
-  href: "/world-cup",
-  tags: ["Sports", "Soccer"],
-  outcomes: [
-    { label: "Argentina", symbol: "ARG", price: "2.38", probability: 42 },
-    { label: "Draw", symbol: "DRAW", price: "3.70", probability: 27 },
-    { label: "Brazil", symbol: "BRA", price: "3.23", probability: 31 },
-  ],
-};
+export const FEATURED_MARKETS: MarketplaceMarket[] = [
+  {
+    id: "featured-tennis-searle",
+    title: "Henry Searle vs Clement Chidekh",
+    competition: "Tennis",
+    sport: "Tennis",
+    status: "upcoming",
+    countdown: "0d : 1h : 31m",
+    combo: true,
+    featured: true,
+    href: "/events",
+    tags: ["Sports", "Tennis"],
+    outcomes: [
+      { label: "H. Searle", symbol: "GB", price: "147", probability: 68 },
+      { label: "C. Chidekh", symbol: "FR", price: "313", probability: 32 },
+    ],
+  },
+  {
+    id: "featured-tennis-gaston",
+    title: "Hugo Gaston vs Jan Choinski",
+    competition: "Tennis",
+    sport: "Tennis",
+    status: "upcoming",
+    countdown: "0d : 0h : 9m",
+    combo: true,
+    featured: true,
+    href: "/events",
+    tags: ["Sports", "Tennis"],
+    outcomes: [
+      { label: "J. Choinski", symbol: "GB", price: "164", probability: 61 },
+      { label: "H. Gaston", symbol: "FR", price: "250", probability: 40 },
+    ],
+  },
+  {
+    id: "featured-tennis-giustino",
+    title: "Lorenzo Giustino vs Florian Broska",
+    competition: "Tennis",
+    sport: "Tennis",
+    status: "upcoming",
+    countdown: "0d : 0h : 22m",
+    combo: true,
+    featured: true,
+    href: "/events",
+    tags: ["Sports", "Tennis"],
+    outcomes: [
+      { label: "L. Giustino", symbol: "IT", price: "188", probability: 54 },
+      { label: "F. Broska", symbol: "DE", price: "215", probability: 46 },
+    ],
+  },
+];
 
+export const FEATURED_MARKET = FEATURED_MARKETS[0];
 export const LIVE_MARKETS: MarketplaceMarket[] = [
   {
     id: "live-arg-bra-goal",
@@ -84,21 +118,6 @@ export const LIVE_MARKETS: MarketplaceMarket[] = [
     outcomes: [
       { label: "USA", symbol: "USA", price: "1.27", probability: 79 },
       { label: "Mexico", symbol: "MEX", price: "4.55", probability: 22 },
-    ],
-  },
-  {
-    id: "live-jpn-ita",
-    title: "Japan vs Italy",
-    competition: "International",
-    sport: "Totals",
-    status: "live",
-    clock: "74:05",
-    score: "1 – 2",
-    href: "/live",
-    tags: ["Live", "Totals"],
-    outcomes: [
-      { label: "Over 3.5", symbol: "O 3.5", price: "1.82", probability: 55 },
-      { label: "Under 3.5", symbol: "U 3.5", price: "2.17", probability: 46 },
     ],
   },
 ];
@@ -236,4 +255,8 @@ export const SPORTS_MARKETS: MarketplaceMarket[] = [
     ],
   },
 ];
+
+
+
+
 
