@@ -1,245 +1,159 @@
 <p align="center">
-  <h1 align="center">InstinctFi — On-Chain Prediction Markets on Solana</h1>
+  <h1 align="center">Whistly — Live Football Micro-Markets on Solana</h1>
   <p align="center">
-    Buy option-coins on prediction polls. Winners take the entire losing pool.<br/>
-    <strong>Real SOL · Real stakes · Fully on-chain</strong>
+    Trade <strong>YES/NO</strong> on the next football moment — "Goal in the next 5 minutes?" — with real devnet SOL.<br/>
+    Markets resolve from <strong>TxLINE score data, not majority vote.</strong>
   </p>
   <p align="center">
+    <em>Built for the TxODDS World Cup Hackathon · Track: Prediction Markets &amp; Settlement</em>
+  </p>
+  <p align="center">
+    <a href="#what-it-is">What it is</a> ·
+    <a href="#txline-integration">TxLINE Integration</a> ·
+    <a href="#how-settlement-works">Settlement</a> ·
     <a href="#quick-start">Quick Start</a> ·
-    <a href="#features">Features</a> ·
-    <a href="#architecture">Architecture</a> ·
-    <a href="#tech-stack">Tech Stack</a> ·
-    <a href="#contributing">Contributing</a>
+    <a href="#tech-stack">Tech Stack</a>
   </p>
 </p>
 
 ---
 
-## InstinctFi Live Goal Markets
-
-**InstinctFi Live Goal Markets** brings BTC-style short-window prediction markets to live football.
-
-Users open a live/demo football match, choose **Goal in next 5 minutes?**, **Goal in next 15 minutes?**, or **Goal in next 45 minutes?**, buy **YES** or **NO**, and claim payouts on Solana after the market resolves.
-
-Markets resolve from match score data, not majority vote.
-
-### Why It Fits The World Cup Hackathon
-
-- Turns live World Cup moments into short, high-energy Solana markets.
-- Uses TxODDS/TxLINE-style fixture and score data to resolve real-world outcomes.
-- Keeps the existing InstinctFi on-chain payout flow: buy position, resolve market, claim payout.
-- Includes mock TxLINE mode so the full demo works even without live matches or API keys.
-
-### Live Goal Settlement Logic
-
-```txt
-If total goals at end of window > total goals at start of window:
-    YES wins
-Else:
-    NO wins
-```
-
-Example: `1-1` to `2-1` resolves to **YES**. `1-1` to `1-1` resolves to **NO**.
-
-### Market Lifecycle
-
-```txt
-OPEN -> LOCKED -> RESOLVING -> RESOLVED -> CLAIMABLE
-```
-
-Markets lock before resolution. Results are resolved from TxLINE score data and then written on-chain through the existing admin settlement flow.
-
-### Demo Mode
-
-The `/live` page includes a mock match:
-
-```txt
-Nepal vs Brazil
-Clock: 63:00
-Score: 1 - 1
-```
-
-Demo controls support:
-
-- Start demo match
-- Simulate goal: YES wins
-- Simulate no goal: NO wins
-- Resolve market
-- Claim payout
-
-### Environment Variables
-
-```env
-TXLINE_BASE_URL=
-TXLINE_SESSION_TOKEN=
-TXLINE_API_TOKEN=
-TXLINE_USE_MOCK=true
-ADMIN_PRIVATE_KEY=
-NEXT_PUBLIC_SOLANA_CLUSTER=devnet
-```
-
-When TxLINE credentials are missing, the app uses mock mode by default.
-
-<!-- 🔗 Replace with your actual deployed URL when available -->
-> **Live Demo:** [https://instinct-fi.vercel.app](https://instinct-fi.vercel.app/) *(Solana Devnet)*
+> **Live demo:** _<!-- add your Vercel URL here -->_ · **Network:** Solana **Devnet** · **Data:** TxLINE (TxODDS)
+>
+> Devnet SOL only — no real money. When TxLINE credentials are not configured, the app **fails closed** (settlement disabled) rather than faking data.
 
 ---
 
-## Table of Contents
+## What it is
 
-- [About the Project](#about-the-project)
-- [Civic Engagement & Janamat (जनमत)](#civic-engagement--janamat-जनमत)
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Architecture](#architecture)
-- [How It Works](#how-it-works)
-- [Quick Start](#quick-start)
-  - [Prerequisites](#prerequisites)
-  - [1. Clone the Repository](#1-clone-the-repository)
-  - [2. Run the Frontend](#2-run-the-frontend)
-  - [3. Build & Deploy Smart Contracts (Optional)](#3-build--deploy-smart-contracts-optional)
-  - [4. Get Devnet SOL](#4-get-devnet-sol)
-- [Project Structure](#project-structure)
-- [On-Chain Programs](#on-chain-programs)
-- [Tokenomics](#tokenomics)
-- [Security](#security)
-- [Roadmap](#roadmap)
-- [Contributing](#contributing)
-- [License](#license)
+**Whistly** turns live World Cup moments into short-window prediction markets on Solana. Instead of betting on a whole match, you trade the *next moment*:
+
+- **Goal in next 5m / 15m / 45m?**
+- Corners, cards, both-teams-to-score, over/under totals, match result
+
+Each market is a real on-chain poll. You stake **devnet SOL** on **YES** or **NO**, the market locks, and it resolves from **real TxLINE score data** — then winners claim their share of the pool on-chain.
+
+The core loop is deliberately honest: every market is labeled with its data source and settlement rule, and nothing is claimed as "verified" or "real-time" unless it actually is.
+
+### Why it fits the hackathon
+
+- **Uses TxLINE as the primary data source** for fixtures, live scores, and settlement evidence.
+- **Deterministic, on-chain resolution** — goal-window outcome is a pure function of start/end score, settled by a wallet-signed transaction.
+- **Fails closed** — no silent mock fallback; settlement is blocked unless TxLINE is configured or mock mode is *explicitly* enabled and labeled.
 
 ---
 
-## About the Project
+## TxLINE Integration
 
-**InstinctFi** is a decentralized prediction-market platform built on **Solana** using the **Anchor framework**. Users connect their Phantom wallet, create or participate in prediction polls by purchasing "option-coins" with real SOL, and earn proportional rewards when their predicted option wins.
+Whistly talks to the real TxLINE API (`txline-dev.txodds.com`) using the documented auth model.
 
-All poll creation, voting, settlement, and reward distribution logic runs **entirely on-chain** via Program Derived Addresses (PDAs) — no centralized servers control funds.
+### Endpoints used
 
-### Why InstinctFi?
+| TxLINE endpoint | Purpose |
+|---|---|
+| `POST /auth/guest/start` | Auto-fetch a guest session JWT (public, no signup) |
+| `GET /api/fixtures/snapshot` | Upcoming & live World Cup fixtures |
+| `GET /api/scores/snapshot/{fixtureId}` | Score data used for settlement |
+| `POST /api/token/activate` | Free-tier activation (wallet-signed) → data API token |
 
-| Problem | Solution |
-|---------|----------|
-| Centralized platforms can manipulate outcomes | Fully on-chain, transparent, immutable |
-| No audit trail for votes or fund distribution | Every vote and transfer recorded on Solana |
-| Free polls → low-quality predictions | Real SOL stakes → skin in the game |
-| No financial incentive | Winners take the entire losing pool |
+Every data request sends `Authorization: Bearer <guestJwt>` + `X-Api-Token: <apiToken>`.
+
+### Fail-closed status system
+
+`GET /api/txline/status` reports the honest state, and the whole UI keys off it:
+
+| State | Meaning | Effect |
+|---|---|---|
+| `connected` | Real TxLINE data flowing | Settlement enabled |
+| `not_configured` | No API token | **Settlement disabled**, "TxLINE Not Configured" shown |
+| `error` | TxLINE request failed | **Settlement disabled**, "TxLINE Error" shown |
+| `mock` | `NEXT_PUBLIC_ENABLE_MOCK_MODE=true` | Labeled "Mock Mode Enabled — not real TxLINE data" |
+
+### One-click free-tier activation
+
+TxLINE's free World Cup tier requires a one-time on-chain subscription. Whistly builds and sends this **from the user's wallet** at `/txline-setup`:
+
+1. Fetch a guest JWT.
+2. Wallet signs an on-chain `subscribe(level 1, 4 weeks)` to the txoracle program (`6pW64gN1s2uqjHkn1unFeEjAwJkPGHoppGvS715wyP2J`) — no TxL payment, only devnet fees.
+3. Wallet signs the activation message `${txSig}::${jwt}`.
+4. Server exchanges it at `/api/token/activate` for the data API token (held server-side, never exposed to the browser).
+
+After activation, upcoming fixtures load from the live feed and scores drive settlement.
 
 ---
 
-## Civic Engagement & Janamat (जनमत)
+## How settlement works
 
-InstinctFi isn't just a prediction market — it's a **decentralized civic engagement platform**. Traditional opinion polls are cheap: anyone can click a button without consequence. Prediction markets flip this by requiring participants to **stake real value**, ensuring opinions are informed and genuine.
+Goal-window markets resolve deterministically from score data:
 
-This makes InstinctFi a powerful tool for **Janamat (जनमत — public opinion)** collection:
+```txt
+startTotal = startHomeScore + startAwayScore   (recorded when the market opens)
+endTotal   = endHomeScore   + endAwayScore     (fetched from TxLINE at window end)
 
-| Use Case | How InstinctFi Helps |
-|----------|---------------------|
-| **Policy Forecasting** | Will a proposed policy succeed? Citizens stake their conviction with real SOL. |
-| **Community Governance** | DAOs and local bodies can gauge informed public sentiment through prediction polls. |
-| **Accountability Tracking** | Track whether elected officials deliver on promises via community-driven markets. |
-| **Decentralized Janamat Sangrah (जनमत संग्रह)** | On-chain, transparent, tamper-proof public opinion collection — no central authority can censor or manipulate results. |
+YES wins  if  endTotal > startTotal
+NO  wins  otherwise
+```
 
-> **Why prediction markets > traditional polls?**
-> Research consistently shows that prediction markets produce more accurate forecasts than surveys or expert panels, because participants have *skin in the game*. InstinctFi brings this proven mechanism on-chain with Solana's speed and transparency.
+Example: `1-1 → 2-1` resolves **YES**; `1-1 → 1-1` resolves **NO**.
 
-**Example civic polls:**
-- 🇳🇵 "Should Kathmandu implement an odd-even vehicle rule?"
-- 🏗️ "Will Nepal's digital ID rollout complete by 2027?"
-- 🗳️ "Should ward-level budgets be decided by community polls?"
-- ✈️ "Will Pokhara International Airport reach 1M passengers by 2028?"
+### Market lifecycle
+
+```txt
+OPEN → LOCKED → RESOLVING → RESOLVED → CLAIMABLE
+```
+
+Settlement will **not** run if: TxLINE is unconfigured, the fixture or score is missing, the window hasn't ended, the market is already resolved, or the admin wallet isn't connected.
+
+### Admin flow (wallet-signed)
+
+The `/admin` panel lets an admin: view TxLINE status, list live markets with their `fixtureId` and start score, **fetch the end score (dry run)**, review the proposed winner and its data source, then **sign the settlement transaction with their wallet**. Nothing is recorded as settled until the on-chain transaction confirms.
+
+### Mapping invariants
+
+- `marketKind`: `0 = Standard`, `1 = LiveGoalWindow`
+- Outcome index: `0 = NO`, `1 = YES`
 
 ---
 
 ## Features
 
-- **Phantom Wallet Auth** — One-click login, no passwords or email
-- **Create Prediction Polls** — Custom options, duration, unit price, and initial SOL investment
-- **Option-Coin Voting** — Buy coins for your predicted option; more coins = higher conviction & reward
-- **Trustless Settlement** — Anyone can trigger settlement after the poll ends; highest-vote option wins
-- **Proportional Rewards** — Winners split the entire prize pool proportional to their coin count
-- **Multi-Period Leaderboard** — Weekly, monthly, and all-time rankings with multiple sort criteria
-- **Rich Profile Dashboard** — Personal stats, created polls, vote history, net profit tracking
-- **Dark Mode UI** — Polished dark theme with smooth Framer Motion animations
-- **PWA Support** — Installable as a Progressive Web App
-- **Image Uploads** — Poll images via Supabase storage with compression
-- **Multi-Language Support** — Internationalization-ready with language toggle
-- **Real-Time Notifications** — In-app notification bell for poll activity
-- **Poll Comments** — Community discussion on each poll
-- **Share & Embed** — Share polls via link or embed in external sites
-- **Activity Feed** — Platform-wide activity stream
-- **Admin Panel** — Admin wallet management for poll moderation
+- **Real devnet SOL staking & payout** — create market, buy YES/NO, settle, claim — fully on-chain via an Anchor program.
+- **Live football micro-markets** — 5m / 15m / 45m goal windows plus corners, cards, totals, and match result.
+- **Upcoming fixtures widget** — real TxLINE fixture feed with an explicit "TxLINE live feed" vs "Mock data" badge.
+- **Live probability graph** — YES/NO implied probability drawn from the *actual on-chain pool*, updating as trades land.
+- **Per-market comments** — wallet-gated discussion keyed to each market.
+- **TxLINE Data Health widget** — live connected / not-configured / error / mock state on `/live` and `/admin`.
+- **Honest UI copy** — "Devnet SOL only", "Settlement disabled until TxLINE is configured", "Markets resolve from score data, not majority vote".
+- **Dark premium marketplace UI** — dense card grid, featured hero market, category filters, responsive down to 360px.
+
+---
+
+## Routes
+
+| Route | Purpose |
+|---|---|
+| `/` | Marketplace homepage — featured market, live now, category grids, upcoming fixtures |
+| `/live` | Live goal-market terminal — window controls, trade panel, graph, comments |
+| `/world-cup` | World Cup market discovery + upcoming fixtures |
+| `/verify` | Settlement verification & proof |
+| `/portfolio` | Your positions, P&L, claims |
+| `/polls` | Full prediction-market listing |
+| `/admin` | Wallet-gated admin + TxLINE settlement panel |
+| `/txline-setup` | TxLINE status + one-click free-tier activation |
 
 ---
 
 ## Tech Stack
 
 | Layer | Technology |
-|-------|-----------|
-| **Blockchain** | Solana (Devnet) |
-| **Smart Contracts** | Anchor 0.30.1 (Rust) |
-| **Frontend** | Next.js 15, React 19, TypeScript |
-| **Styling** | Tailwind CSS 3.4, Framer Motion |
-| **Wallet** | Phantom (via `@solana/wallet-adapter`) |
-| **Off-Chain Storage** | Supabase (images, caching) |
-| **Testing** | ts-mocha, Chai |
-
----
-
-## Architecture
-
-```
-┌──────────────────────────────────────────────────────────┐
-│                    FRONTEND (Next.js 15)                  │
-│                                                          │
-│  ┌──────────┐  ┌──────────┐  ┌────────────┐  ┌────────┐│
-│  │ Landing  │  │  Polls   │  │ Leaderboard│  │Profile ││
-│  │  Page    │  │  CRUD    │  │  (3 tabs)  │  │  Stats ││
-│  └────┬─────┘  └────┬─────┘  └─────┬──────┘  └───┬────┘│
-│       └──────────────┴──────────────┴──────────────┘     │
-│                          │                               │
-│              Providers.tsx (App Context)                  │
-│       Wallet auth · State management · TX layer          │
-└──────────────────────────┬───────────────────────────────┘
-                           │  @solana/web3.js
-                           ▼
-┌──────────────────────────────────────────────────────────┐
-│                SOLANA BLOCKCHAIN (Devnet)                 │
-│                                                          │
-│  ┌────────────────────────────────────────────────────┐  │
-│  │            instinctfi (Unified Program)            │  │
-│  │                                                    │  │
-│  │  initialize_user · create_poll · edit_poll         │  │
-│  │  delete_poll · cast_vote · settle_poll             │  │
-│  │  claim_reward · sweep_dust                         │  │
-│  └────────────────────────────────────────────────────┘  │
-│                                                          │
-│  PDAs:  UserAccount · PollAccount · Treasury · Vote      │
-└──────────────────────────────────────────────────────────┘
-```
-
----
-
-## How It Works
-
-### On-Chain Flow
-
-```
-Creator (SOL) ──→ create_poll ──→ Treasury PDA (holds SOL)
-                                      │
-Voter (SOL)   ──→ cast_vote   ──→ Treasury PDA (more SOL)
-                                      │
-Anyone        ──→ settle_poll ──→ Winner determined (highest votes)
-                                      │
-Winner        ──→ claim_reward ←── Treasury PDA sends proportional SOL
-```
-
-### User Journey
-
-1. **Connect** — User connects Phantom wallet; on-chain UserAccount PDA is created
-2. **Create or Browse** — Create a poll with SOL investment, or browse existing polls
-3. **Vote** — Buy option-coins for a predicted outcome (SOL → Treasury PDA)
-4. **Settle** — After expiry, anyone triggers settlement; highest-voted option wins
-5. **Claim** — Winners call `claim_reward` to receive proportional SOL from the pool
+|---|---|
+| Blockchain | Solana (Devnet) |
+| Smart contract | Anchor (Rust) |
+| Data layer | TxLINE / TxODDS |
+| Frontend | Next.js 15, React 19, TypeScript |
+| Styling | Tailwind CSS |
+| Wallet | `@solana/wallet-adapter` (Phantom, etc.) |
+| Off-chain | Supabase (comments, images) — optional |
 
 ---
 
@@ -247,236 +161,75 @@ Winner        ──→ claim_reward ←── Treasury PDA sends proportional S
 
 ### Prerequisites
 
-| Requirement | Version | Purpose |
-|-------------|---------|---------|
-| **Node.js** | ≥ 18 | Frontend development |
-| **npm** or **yarn** | Latest | Package management |
-| **Phantom Wallet** | Browser extension | Wallet connection (set to Devnet) |
-| **Rust & Cargo** | Latest stable | *(Optional)* Smart contract development |
-| **Solana CLI** | ≥ 1.18 | *(Optional)* Blockchain interaction |
-| **Anchor CLI** | 0.30.1 | *(Optional)* Smart contract framework |
+- Node.js ≥ 18
+- A Solana wallet (Phantom) set to **Devnet**
+- Some devnet SOL (in-app faucet or `solana airdrop 2`)
 
-### 1. Clone the Repository
+### Run
 
 ```bash
-git clone https://github.com/rajanpanth/instinctfi.git
-cd instinctfi
-```
-
-### 2. Run the Frontend
-
-```bash
-# Navigate to the frontend app
-cd app
-
-# Install dependencies
+git clone https://github.com/rajanpanth/Whistly.git
+cd Whistly/app
 npm install
-
-# Start the development server
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+Open [http://localhost:3000](http://localhost:3000).
 
-> **Note:** Make sure your Phantom wallet is set to **Devnet** (`Settings → Developer Settings → Change Network → Devnet`).
+### Environment variables
 
-### 3. Build & Deploy Smart Contracts (Optional)
+Create `app/.env.local`:
 
-Only needed if you want to modify the on-chain programs.
+```env
+# --- TxLINE (real data) ---
+# All required for real data; without them the app FAILS CLOSED.
+TXLINE_BASE_URL=https://txline-dev.txodds.com
+TXLINE_GUEST_JWT=            # optional — auto-fetched from /auth/guest/start
+TXLINE_API_TOKEN=            # required — from /api/token/activate (or the in-app activation)
 
-```bash
-# Return to root directory
-cd ..
-
-# Install root dependencies
-yarn install
-
-# Build all Anchor programs
-anchor build
-
-# List generated program keys
-anchor keys list
-
-# Configure Solana CLI for devnet
-solana config set --url devnet
-
-# Airdrop SOL for deployment fees
-solana airdrop 2
-
-# Deploy to devnet
-anchor deploy
+# --- Mock mode (demo only) ---
+# Explicit opt-in for clearly-labeled mock football data. Never enabled implicitly.
+NEXT_PUBLIC_ENABLE_MOCK_MODE=false
 ```
 
-After deployment, update the program IDs in:
-- `Anchor.toml`
-- `app/src/lib/program.ts`
+**To get real data:** open `/txline-setup` with a devnet-funded wallet and click **Activate with wallet**, or run the official TxODDS `subscription_free_tier.ts` script and paste the resulting token into `TXLINE_API_TOKEN`.
 
-### 4. Get Devnet SOL
-
-- Use the **in-app "Claim SOL"** button (devnet airdrop)
-- Or run: `solana airdrop 2 <YOUR_WALLET_ADDRESS> --url devnet`
+**For a labeled demo without credentials:** set `NEXT_PUBLIC_ENABLE_MOCK_MODE=true` — all mock data is clearly labeled in the UI.
 
 ---
 
 ## Project Structure
 
 ```
-instinctfi/
-├── Anchor.toml                 # Anchor workspace configuration
-├── Cargo.toml                  # Rust workspace manifest
-├── package.json                # Root dependencies (Anchor testing)
-├── tsconfig.json               # TypeScript config for tests
-│
-├── programs/
-│   └── instinctfi/             # ★ Unified Anchor program
-│       └── src/
-│           ├── lib.rs          # Program entry (8 instructions)
-│           ├── state.rs        # Account structs (PDAs)
-│           ├── errors.rs       # Custom error enum
-│           └── instructions/   # One file per instruction
-│               ├── cast_vote.rs
-│               ├── claim_reward.rs
-│               ├── create_poll.rs
-│               ├── delete_poll.rs
-│               ├── edit_poll.rs
-│               ├── initialize_user.rs
-│               ├── sweep_dust.rs
-│               └── settle_poll.rs
-│
-├── tests/
-│   └── voting.ts               # End-to-end Anchor tests
-│
-└── app/                        # Next.js 15 Frontend
-    ├── package.json
-    ├── next.config.js
-    ├── tailwind.config.js
+Whistly/
+├── programs/                     # Anchor program (Rust)
+├── tests/                        # Anchor tests
+├── audit-notes/                  # Technical docs & verification notes
+└── app/                          # Next.js 15 frontend
     └── src/
-        ├── app/                # App Router pages
-        │   ├── page.tsx        # Landing page
-        │   ├── create/         # Poll creation
-        │   ├── polls/          # Poll listing & detail
-        │   ├── leaderboard/    # Leaderboard
-        │   ├── profile/        # User profile
-        │   ├── admin/          # Admin panel
-        │   └── activity/       # Activity feed
-        ├── components/         # Reusable UI components
-        └── lib/                # Utilities, types, program interaction
+        ├── app/
+        │   ├── live/             # Live goal-market terminal
+        │   ├── admin/            # Admin + TxLINE settlement panel
+        │   ├── txline-setup/     # Free-tier activation flow
+        │   └── api/
+        │       ├── txline/       # status, fixtures, scores, guest-jwt, activate
+        │       └── markets/      # create-live-goal, resolve-live-goal
+        ├── components/           # Marketplace UI, graphs, widgets
+        └── lib/
+            └── txline/           # Fail-closed client, adapters, auth
 ```
 
 ---
 
-## On-Chain Programs
+## Honest limitations
 
-### Instruction Reference
-
-| Instruction | Description | SOL Movement |
-|-------------|-------------|--------------|
-| `initialize_user` | Create user PDA account | Rent only |
-| `create_poll` | Create poll + treasury PDA with SOL investment | Creator → Treasury |
-| `edit_poll` | Edit poll metadata (creator-only, 0 votes, active) | None |
-| `delete_poll` | Delete poll and refund SOL from treasury | Treasury → Creator |
-| `cast_vote` | Buy option-coins with SOL | Voter → Treasury |
-| `settle_poll` | Determine winner + send creator reward | Treasury → Creator |
-| `claim_reward` | Winners claim proportional SOL from pool | Treasury → Winner |
-| `sweep_dust` | Sweep remaining platform fees + rounding dust | Treasury → Creator |
-
-### PDA Accounts
-
-| Account | Seeds | Description |
-|---------|-------|-------------|
-| `UserAccount` | `["user", authority]` | User profile & cumulative stats |
-| `PollAccount` | `["poll", creator, poll_id]` | Poll data, options, vote counts |
-| `Treasury` | `["treasury", poll_account]` | SOL vault for each poll |
-| `VoteAccount` | `["vote", poll_account, voter]` | Per-user vote record on a poll |
-
-### Program ID
-
-```
-J9AqrLZWDXaQfDwtFpC2GG9hBb7SAPxRwVpGs753EgWV
-```
-
-> Deployed to Solana devnet on 2026-03-01.
-
----
-
-## Tokenomics
-
-```
-┌─────────────────────────────────────────────────┐
-│              POLL ECONOMICS EXAMPLE              │
-│                                                  │
-│  Creator Investment:        1.0 SOL              │
-│  ├── Platform Fee (1%):    -0.01 SOL             │
-│  ├── Creator Reward (1%):  -0.01 SOL             │
-│  └── Initial Pool (98%):   0.98 SOL              │
-│                                                  │
-│  + Voter A buys 50 "Yes" coins:  +0.50 SOL       │
-│  + Voter B buys 30 "No"  coins:  +0.30 SOL       │
-│  + Voter C buys 20 "Yes" coins:  +0.20 SOL       │
-│                                                  │
-│  Total Pool:                1.98 SOL              │
-│                                                  │
-│  Result: "Yes" wins (70 vs 30 votes)             │
-│                                                  │
-│  Voter A reward: (50/70) × 1.98 = 1.414 SOL     │
-│  Voter C reward: (20/70) × 1.98 = 0.566 SOL     │
-│  Voter B reward:                   0     SOL     │
-│  Creator reward (on settle):       0.01  SOL     │
-└─────────────────────────────────────────────────┘
-```
-
-**Reward formula:**
-
-```
-user_reward = (user_winning_votes / total_winning_votes) × total_pool
-```
-
----
-
-## Security
-
-| Concern | Mitigation |
-|---------|------------|
-| Fund safety | Real SOL transfers via `system_program::transfer` CPI — not internal accounting |
-| Treasury control | PDAs hold all funds; only the program can sign withdrawals |
-| Self-voting | Creator cannot vote on their own poll (enforced on-chain) |
-| Double settlement | Status flag prevents settling a poll more than once |
-| Double claiming | `claimed: bool` on VoteAccount prevents re-claims |
-| Overflow | Proportional rewards computed with `u128` math |
-| Refunds | Full SOL returned on poll deletion if no votes cast |
-| Account validation | Anchor constraints (`has_one`, `seeds`, `bump`) enforce PDA ownership |
-| Permissionless settlement | Anyone can trigger after end time — no single point of failure |
-
----
-
-## Roadmap
-
-| Phase | Feature | Description |
-|-------|---------|-------------|
-| ~~**v1.1**~~ | ~~Real SOL Mode~~ | ✅ Implemented — all transactions use real SOL |
-| **v1.2** | Token Extensions | Token-2022 vote receipt NFTs for proof of participation |
-| **v1.3** | Oracle Integration | Pyth/Switchboard for auto-settlement of price predictions |
-| **v2.0** | DAO Governance | Token holders vote on platform parameters |
-| **v2.1** | Tournament Mode | Multi-round prediction tournaments |
-| **v2.2** | Mobile App | React Native with Phantom mobile deep-linking |
-| **v3.0** | Cross-Chain | Bridge to Ethereum/Polygon |
-
----
-
-## Contributing
-
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+- Real fixtures/scores appear **only after** the one-time wallet activation (or a `TXLINE_API_TOKEN` env var) — TxLINE requires an on-chain subscription even for the free tier, so there is no credential-free path to real data.
+- The score-payload parser follows the documented TxLINE schema and fails closed if a payload can't be parsed; it should be sanity-checked against one live fixture after activation.
+- On-chain TxLINE proof validation (`validate_stat_v3`) is **not** implemented, and the UI never claims it.
+- Live-market metadata is held in-memory server-side (resets on restart); on-chain poll state is the source of truth for funds.
 
 ---
 
 ## License
 
 Distributed under the **MIT License**. See [LICENSE](LICENSE) for details.
-
----
