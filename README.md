@@ -18,7 +18,7 @@
 
 ---
 
-> **Live demo:** _<!-- add your Vercel URL here -->_ · **Network:** Solana **Devnet** · **Data:** TxLINE (TxODDS)
+> **Live demo:** [https://www.whistly.tech](https://www.whistly.tech) · **Network:** Solana **Devnet** · **Data:** TxLINE (TxODDS)
 >
 > Devnet SOL only — no real money. When TxLINE credentials are not configured, the app **fails closed** (settlement disabled) rather than faking data.
 
