@@ -318,7 +318,7 @@ const translations = {
   close: { en: "Close", ne: "बन्द" },
 
   /* ── Poll detail ── */
-  backToPolls: { en: "Back to Polls", ne: "मतदानहरूमा फर्कनुहोस्" },
+  backToPolls: { en: "Back to Markets", ne: "बजारहरूमा फर्कनुहोस्" },
   pollNotFound: { en: "Poll not found", ne: "मतदान भेटिएन" },
   loadingPoll: { en: "Loading poll...", ne: "मतदान लोड हुदैछ..." },
   connectWalletToStart: { en: "Connect Wallet to Start", ne: "सुरु गर्न वालेट जडान गर्नुहोस्" },

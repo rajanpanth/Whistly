@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { MarketplaceMarket } from "@/lib/marketplaceData";
 
 const VIEW_W = 620;
@@ -12,6 +12,8 @@ const POINTS = 42;
 const PROB_MIN = 3;
 const PROB_MAX = 77;
 const TICK_MS = 2500;
+/** Minutes represented by one history step (pre-match markets reprice slowly). */
+const STEP_MINUTES = 30;
 
 type Point = { x: number; y: number };
 
@@ -40,13 +42,16 @@ function clampProb(value: number): number {
   return Math.min(PROB_MAX, Math.max(PROB_MIN, value));
 }
 
-/* Walk backwards from the market's current probability; rare large steps read as goals/cards. */
+/* Walk backwards from the market's current probability. Markets hold flat
+   between trades and reprice in discrete jumps, so favour plateaus with
+   occasional steps and rare shocks (goals, team news). */
 function buildHistory(seedKey: string, anchor: number): number[] {
   const rng = mulberry32(hashSeed(seedKey));
   const series = new Array<number>(POINTS);
   series[POINTS - 1] = clampProb(anchor);
   for (let i = POINTS - 2; i >= 0; i--) {
-    const drift = (rng() - 0.5) * 4.5;
+    const hold = rng() < 0.48;
+    const drift = hold ? 0 : (rng() - 0.5) * 5;
     const shock = rng() < 0.05 ? (rng() - 0.5) * 16 : 0;
     series[i] = clampProb(series[i + 1] + drift + shock);
   }
@@ -62,33 +67,15 @@ function toPoints(series: number[]): Point[] {
   return series.map((prob, index) => ({ x: index * step, y: probToY(prob) }));
 }
 
-/* Catmull-Rom → cubic bezier for a smooth line through every real data point. */
-function smoothPath(points: Point[]): string {
+/* Step-after path: each price holds until the next reprice — the honest shape
+   for an order-driven market (no invented values between trades). */
+function stepPath(points: Point[]): string {
   if (points.length < 2) return "";
   let d = `M${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = points[i - 1] ?? points[i];
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const p3 = points[i + 2] ?? p2;
-    const c1x = p1.x + (p2.x - p0.x) / 6;
-    const c1y = p1.y + (p2.y - p0.y) / 6;
-    const c2x = p2.x - (p3.x - p1.x) / 6;
-    const c2y = p2.y - (p3.y - p1.y) / 6;
-    d += ` C${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`;
+  for (let i = 1; i < points.length; i++) {
+    d += ` H${points[i].x.toFixed(1)} V${points[i].y.toFixed(1)}`;
   }
   return d;
-}
-
-function timeLabels(market: MarketplaceMarket): string[] {
-  const match = market.clock?.match(/(\d+):(\d+)/);
-  if (market.status === "live" && match) {
-    const minute = parseInt(match[1], 10);
-    return [Math.max(0, minute - 3), Math.max(0, minute - 2), Math.max(0, minute - 1)]
-      .map(m => `${String(m).padStart(2, "0")}:00`)
-      .concat("Now");
-  }
-  return ["45m ago", "30m ago", "15m ago", "Now"];
 }
 
 /* Percent → CSS top inside .market-chart (svg spans the area above the 1.5rem time row). */
@@ -107,8 +94,12 @@ export default function MarketProbabilityChart({ market }: { market: Marketplace
     [market.id, anchors]
   );
   const [series, setSeries] = useState(base);
+  const [now, setNow] = useState<number | null>(null);
+  const [hover, setHover] = useState<number | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => setSeries(base), [base]);
+  useEffect(() => setNow(Date.now()), [market.id]);
 
   useEffect(() => {
     if (market.status !== "live") return;
@@ -123,9 +114,29 @@ export default function MarketProbabilityChart({ market }: { market: Marketplace
     return () => window.clearInterval(timer);
   }, [market.status, market.id, anchors]);
 
+  /* Real timestamps for each step, set after mount (keeps SSR deterministic). */
+  const stepMs = (market.status === "live" ? 1 : STEP_MINUTES) * 60_000;
+  const timeAt = (index: number): number | null =>
+    now === null ? null : now - (POINTS - 1 - index) * stepMs;
+
+  const axisTimeLabels = useMemo(() => {
+    const marks = [0, 14, 28];
+    if (now === null) return [...marks.map(() => "—"), "Now"];
+    const fmt = (t: number) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return [...marks.map(index => fmt(now - (POINTS - 1 - index) * stepMs)), "Now"];
+  }, [now, stepMs]);
+
+  function handleMove(event: React.MouseEvent<HTMLDivElement>) {
+    const el = wrapRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const fraction = (event.clientX - rect.left) / rect.width;
+    setHover(Math.min(POINTS - 1, Math.max(0, Math.round(fraction * (POINTS - 1)))));
+  }
+
   const lines = series.map(line => {
     const points = toPoints(line);
-    return { points, path: smoothPath(points), latest: line[line.length - 1] };
+    return { points, path: stepPath(points), latest: line[line.length - 1] };
   });
   // Nudge overlapping end labels apart so both stay readable.
   const labelProbs = lines.map(line => line.latest);
@@ -135,17 +146,47 @@ export default function MarketProbabilityChart({ market }: { market: Marketplace
   }
   const gridRows = [0, 1, 2, 3, 4].map(row => Y_TOP + ((Y_BOTTOM - Y_TOP) / 4) * row);
 
-  return <div className="market-chart" aria-label={`Probability history for ${market.title}`} role="img">
+  const hoverX = hover === null ? 0 : (hover / (POINTS - 1)) * VIEW_W;
+  const hoverTime = hover === null ? null : timeAt(hover);
+
+  return <div
+    ref={wrapRef}
+    className="market-chart"
+    aria-label={`Probability history for ${market.title}`}
+    role="img"
+    onMouseMove={handleMove}
+    onMouseLeave={() => setHover(null)}
+  >
     <div className="chart-axis" aria-hidden="true"><span>80%</span><span>60%</span><span>40%</span><span>20%</span><span>0%</span></div>
     <svg viewBox={`0 0 ${VIEW_W} ${VIEW_H}`} preserveAspectRatio="none" aria-hidden="true">
       <path className="chart-grid" d={gridRows.map(y => `M0 ${y}H${VIEW_W}`).join("")} />
       <path className="chart-red" d={lines[0]?.path} />
       {lines[1] && <path className="chart-blue" d={lines[1].path} />}
-      {lines[0] && <circle className="chart-dot-red" cx={lines[0].points[lines[0].points.length - 1].x} cy={lines[0].points[lines[0].points.length - 1].y} r="5" />}
-      {lines[1] && <circle className="chart-dot-blue" cx={lines[1].points[lines[1].points.length - 1].x} cy={lines[1].points[lines[1].points.length - 1].y} r="5" />}
+      {lines[0] && <circle className="chart-dot-red" cx={VIEW_W} cy={probToY(lines[0].latest)} r="5" />}
+      {lines[1] && <circle className="chart-dot-blue" cx={VIEW_W} cy={probToY(lines[1].latest)} r="5" />}
+      {hover !== null && <g className="chart-hover-layer">
+        <line className="chart-crosshair" x1={hoverX} x2={hoverX} y1={Y_TOP - 16} y2={Y_BOTTOM} />
+        {lines[0] && <circle className="chart-hover-dot red" cx={hoverX} cy={probToY(series[0][hover])} r="4.5" />}
+        {lines[1] && <circle className="chart-hover-dot blue" cx={hoverX} cy={probToY(series[1][hover])} r="4.5" />}
+      </g>}
     </svg>
     {lines[0] && <div className="chart-label red" style={{ top: labelTop(labelProbs[0]) }}>{market.outcomes[0]?.label} {Math.round(lines[0].latest)}%</div>}
     {lines[1] && <div className="chart-label blue" style={{ top: labelTop(labelProbs[1]) }}>{market.outcomes[1]?.label} {Math.round(lines[1].latest)}%</div>}
-    <div className="chart-times" aria-hidden="true">{timeLabels(market).map(label => <span key={label}>{label}</span>)}</div>
+    {hover !== null && <div
+      className={`chart-tooltip ${hover > POINTS * 0.55 ? "flip" : ""}`}
+      style={{ left: `${(hover / (POINTS - 1)) * 100}%` }}
+    >
+      <b>{hoverTime === null
+        ? "—"
+        : hover === POINTS - 1
+          ? "Now"
+          : new Date(hoverTime).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</b>
+      {market.outcomes.slice(0, 2).map((outcome, index) => <div key={outcome.label}>
+        <span className={`dot ${index === 0 ? "red" : "blue"}`} aria-hidden="true" />
+        <span className="chart-tooltip-name">{outcome.label}</span>
+        <em>{Math.round(series[index][hover])}%</em>
+      </div>)}
+    </div>}
+    <div className="chart-times" aria-hidden="true">{axisTimeLabels.map((label, index) => <span key={`${index}-${label}`}>{label}</span>)}</div>
   </div>;
 }

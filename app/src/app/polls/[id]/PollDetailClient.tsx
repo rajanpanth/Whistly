@@ -105,7 +105,7 @@ export default function PollDetailClient() {
                     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-gray-600"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>
                 </div>
                 <p className="text-gray-400 text-lg font-medium mb-2">{t("pollNotFound")}</p>
-                <button onClick={() => router.push("/polls")} className="text-brand-400 hover:text-brand-300 text-sm font-medium transition-colors">
+                <button onClick={() => router.push("/")} className="text-brand-400 hover:text-brand-300 text-sm font-medium transition-colors">
                     ← {t("backToPolls")}
                 </button>
             </div>
@@ -190,13 +190,13 @@ export default function PollDetailClient() {
                         isOpen={showDeleteModal}
                         onClose={() => setShowDeleteModal(false)}
                         poll={poll}
-                        onDeleted={() => router.push("/polls")}
+                        onDeleted={() => router.push("/")}
                     />
                 </>
             )}
 
             {/* Back */}
-            <button onClick={() => router.push("/polls")} className="flex items-center gap-1.5 text-gray-400 hover:text-white mb-6 text-sm font-medium transition-colors group">
+            <button onClick={() => router.push("/")} className="flex items-center gap-1.5 text-gray-400 hover:text-white mb-6 text-sm font-medium transition-colors group">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="group-hover:-translate-x-0.5 transition-transform"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
                 {t("backToPolls")}
             </button>

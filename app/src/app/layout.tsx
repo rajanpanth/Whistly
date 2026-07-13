@@ -7,7 +7,6 @@ import InstallPrompt from "@/components/InstallPrompt";
 import WebVitals from "@/components/WebVitals";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import PageTransition from "@/components/PageTransition";
-import LoadingScreen from "@/components/LoadingScreen";
 import AuroraBackground from "@/components/AuroraBackground";
 import AppProviders from "@/components/AppProviders";
 import { Toaster } from "react-hot-toast";
@@ -97,7 +96,6 @@ export default function RootLayout({
       <body className={inter.className} suppressHydrationWarning>
         <AppProviders>
           <AuroraBackground />
-          <LoadingScreen />
           <Suspense fallback={null}>
             <Navbar />
           </Suspense>

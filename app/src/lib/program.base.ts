@@ -18,10 +18,13 @@ export const PROGRAM_ID = new PublicKey(
 export const PROGRAM_DEPLOYED = true;
 
 export const CLUSTER = "devnet" as "devnet" | "mainnet-beta" | "localnet";
+// Prefer a dedicated RPC (Helius/QuickNode/etc.) — the public devnet endpoint
+// aggressively rate-limits (429 "Connection rate limits exceeded").
 export const RPC_URL =
-    CLUSTER === "localnet"
+    process.env.NEXT_PUBLIC_SOLANA_RPC_URL ||
+    (CLUSTER === "localnet"
         ? "http://localhost:8899"
-        : clusterApiUrl(CLUSTER);
+        : clusterApiUrl(CLUSTER));
 
 export const connection = new Connection(RPC_URL, {
     commitment: "confirmed",

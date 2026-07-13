@@ -20,6 +20,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useApp } from "@/components/Providers";
+import CountdownTimer from "@/components/marketplace/CountdownTimer";
 import DataHealthWidget from "@/components/kicktick/DataHealthWidget";
 import SettlementProof from "@/components/kicktick/SettlementProof";
 import PollComments from "@/components/PollComments";
@@ -316,6 +317,7 @@ export default function LiveGoalMarketsPage() {
             />
             <div className="mt-4"><DataHealthWidget connected={!mockMode} compact /></div>
           </div>
+          <UpcomingWindowsSection fixtures={fixtures.filter(f => f.status === "SCHEDULED")} />
           <ScoreboardCard fixture={fixture} />
           <WindowSelector
             selectedWindow={selectedWindow}
@@ -333,6 +335,7 @@ export default function LiveGoalMarketsPage() {
             claimTx={selectedMarket ? claimTxByMarket[selectedMarket.id] : undefined}
             onCreate={() => createLiveMarket(selectedWindow)}
             busy={busyiey !== null}
+            admin={admin}
           />
           <TimelineCard
             fixture={fixture}
@@ -417,22 +420,27 @@ function HeroHeader({ txlineState }: { txlineState: TxLineUiState }) {
           ? { label: "TXLINE ERROR", className: "border-[#fa4669]/40 bg-[#fa4669]/10 text-[#f78ba0]" }
           : { label: "TXLINE NOT CONFIGURED", className: "border-[#fa4669]/40 bg-[#fa4669]/10 text-[#f78ba0]" };
   return (
-    <header className="rounded-lg border border-[#29292f] bg-[#19191d] p-4 shadow-2xl shadow-black/20 sm:p-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <header className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-[#101014] p-5 shadow-2xl shadow-black/30 sm:p-6">
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{ background: "radial-gradient(80% 60% at 92% -10%, rgba(250,70,105,.12), transparent 55%), radial-gradient(70% 55% at -5% 20%, rgba(32,211,138,.09), transparent 55%), radial-gradient(120% 90% at 50% 130%, rgba(80,58,213,.12), transparent 60%)" }}
+        aria-hidden="true"
+      />
+      <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <div className="flex flex-wrap gap-2 text-xs font-semibold">
             <Badge className="border-[#fa4669]/40 bg-[#fa4669]/10 text-[#f78ba0]"><Flame size={13} /> LIVE</Badge>
             <Badge className="border-violet-500/40 bg-violet-500/10 text-violet-300">DEVNET</Badge>
             <Badge className={stateBadge.className}>{stateBadge.label}</Badge>
           </div>
-          <h1 className="mt-4 font-heading text-3xl font-bold text-white sm:text-4xl">
-            iickTick Live Markets
+          <h1 className="mt-4 font-heading text-3xl font-bold uppercase tracking-[-0.03em] text-white sm:text-4xl">
+            Whistly Live Markets
           </h1>
           <p className="mt-2 max-w-3xl text-sm text-[#c9c9ce]">
-            Trade every football moment before the clock runs out. Devnet SOL only. Markets resolve from score data, not majority vote.
+            Trade every football moment before the clock runs out. Live goal windows are opened by Whistly at kickoff and resolve from score data, not majority vote. Devnet SOL only.
           </p>
         </div>
-        <div className="rounded-lg border border-[#20d38a]/25 bg-[#20d38a]/10 p-3 text-sm text-[#b9f0d6]">
+        <div className="rounded-xl border border-[#20d38a]/25 bg-[#20d38a]/10 p-3 text-sm text-[#b9f0d6]">
           <div className="flex items-center gap-2 font-semibold">
             <ShieldCheck size={16} />
             Resolution source
@@ -474,16 +482,19 @@ function LiveMatchesPanel({
   onSelect: (window: LiveGoalWindowMinutes) => void;
 }) {
   return (
-    <section className="rounded-lg border border-[#29292f] bg-[#141418] p-3">
-      <div className="mb-3 text-sm font-semibold text-[#e6e6e9]">Live matches</div>
-      <div className="rounded-lg bg-[#111114]/80 p-3">
-        <div className="text-xs text-[#a1a1aa]">{fixture?.competition ?? "World Cup Demo Match"}</div>
-        <div className="mt-1 text-sm font-semibold text-white">
+    <section className="rounded-2xl border border-white/[0.07] bg-gradient-to-b from-[#15151a] to-[#101014] p-3">
+      <div className="mb-3 flex items-center justify-between text-sm font-semibold text-[#e6e6e9]">
+        Match feed
+        <span className="rounded-full border border-[#e6ff3e]/25 bg-[#e6ff3e]/[0.06] px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#d8ec52]">Demo</span>
+      </div>
+      <div className="rounded-xl border border-white/[0.05] bg-[#0d0d11]/80 p-3">
+        <div className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#8b8b94]">{fixture?.competition ?? "World Cup Demo Match"}</div>
+        <div className="mt-1 text-sm font-bold text-white">
           {fixture ? `${fixture.homeTeam} vs ${fixture.awayTeam}` : "Loading match"}
         </div>
-        <div className="mt-2 flex items-center justify-between text-xs text-[#c9c9ce]">
-          <span>{fixture ? formatMatchClock(fixture.clockSeconds) : "--:--"} LIVE</span>
-          <span>{fixture ? `${fixture.homeScore} - ${fixture.awayScore}` : "- -"}</span>
+        <div className="mt-2 flex items-center justify-between font-mono text-xs text-[#c9c9ce]">
+          <span className="text-[#f78ba0]">{fixture ? formatMatchClock(fixture.clockSeconds) : "--:--"} LIVE</span>
+          <span className="font-bold text-white">{fixture ? `${fixture.homeScore} - ${fixture.awayScore}` : "- -"}</span>
         </div>
       </div>
       <div className="mt-3 space-y-2">
@@ -518,7 +529,7 @@ function DemoControls({
   onScenario: (scenario: "BASE" | "YES_GOAL" | "NO_GOAL") => void;
 }) {
   return (
-    <section className="rounded-lg border border-[#29292f] bg-[#141418] p-3">
+    <section className="rounded-2xl border border-white/[0.07] bg-gradient-to-b from-[#15151a] to-[#101014] p-3">
       <div className="flex items-center justify-between text-sm font-semibold text-[#e6e6e9]">
         Demo controls
         <Gauge size={15} className="text-[#20d38a]" />
@@ -549,24 +560,69 @@ function DemoControlsCompact({
   );
 }
 
+function countdownValue(startTimeMs: number): string {
+  const total = Math.max(0, Math.floor((startTimeMs - Date.now()) / 1000));
+  const days = Math.floor(total / 86400);
+  const hours = Math.floor((total % 86400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  return `${days}d : ${hours}h : ${minutes}m : ${total % 60}s`;
+}
+
+function UpcomingWindowsSection({ fixtures }: { fixtures: TxLineFixture[] }) {
+  if (fixtures.length === 0) return null;
+  return (
+    <section className="rounded-2xl border border-white/[0.07] bg-gradient-to-b from-[#15151a] to-[#101014] p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2.5 font-heading text-lg font-bold uppercase tracking-[-0.02em] text-white">
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-[#2fe39a] to-[#0d8a58] text-[#04160d] shadow-[0_6px_16px_rgba(32,211,138,0.28)]"><Clock size={14} /></span>
+          Upcoming live windows
+        </h3>
+        <span className="text-[9.5px] font-extrabold uppercase tracking-[0.14em] text-[#8b8b94]">Opened by Whistly at kickoff</span>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        {fixtures.map(fixture => (
+          <article key={fixture.fixtureId} className="rounded-xl border border-white/[0.06] bg-[#101014] p-3.5 transition-colors hover:border-white/[0.14]">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-[10px] font-extrabold uppercase tracking-[0.13em] text-[#8b8b94]">{fixture.competition}</div>
+                <div className="mt-1 truncate font-heading text-base font-bold text-white">{fixture.homeTeam} vs {fixture.awayTeam}</div>
+              </div>
+              {fixture.startTimeMs && <span className="shrink-0"><CountdownTimer value={countdownValue(fixture.startTimeMs)} target={new Date(fixture.startTimeMs).toISOString()} /></span>}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-white/[0.05] pt-2.5">
+              {LIVE_GOAL_WINDOWS.map(windowMinutes => (
+                <span key={windowMinutes} className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2 py-1 text-[10px] font-bold text-[#c9c9ce]">Goal in {windowMinutes}m</span>
+              ))}
+              <span className="ml-auto text-[9.5px] font-extrabold uppercase tracking-[0.12em] text-[#7ce8bb]">Opens at kickoff</span>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function ScoreboardCard({ fixture }: { fixture?: TxLineFixture }) {
   const homeCode = fixture?.homeTeam.slice(0, 3).toUpperCase() ?? "ARG";
   const awayCode = fixture?.awayTeam.slice(0, 3).toUpperCase() ?? "BRA";
   return (
-    <section className="rounded-lg border border-[#29292f] bg-[#141418] p-4">
+    <section className="rounded-2xl border border-white/[0.07] bg-gradient-to-b from-[#15151a] to-[#101014] p-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-sm text-[#f78ba0]">
-            <span className="h-2 w-2 rounded-full bg-[#fa4669]" />
-            {fixture ? `${formatMatchClock(fixture.clockSeconds)} LIVE` : "63:20 LIVE"}
+          <div className="flex flex-wrap items-center gap-2 text-sm text-[#f78ba0]">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#fa4669]/30 bg-[#fa4669]/10 px-2.5 py-1 font-mono text-xs font-bold">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#fa4669]" />
+              {fixture ? `${formatMatchClock(fixture.clockSeconds)} LIVE` : "63:20 LIVE"}
+            </span>
+            <span className="rounded-full border border-[#e6ff3e]/25 bg-[#e6ff3e]/[0.06] px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#d8ec52]">Settlement demo</span>
           </div>
-          <h2 className="mt-2 font-heading text-2xl font-bold text-white sm:text-3xl">
+          <h2 className="mt-3 font-heading text-2xl font-bold uppercase tracking-[-0.03em] text-white sm:text-3xl">
             {fixture ? `${fixture.homeTeam} vs ${fixture.awayTeam}` : "Argentina vs Brazil"}
           </h2>
-          <p className="mt-1 text-sm text-[#a1a1aa]">{fixture?.competition ?? "World Cup Demo Match"}</p>
+          <p className="mt-1 text-sm text-[#a1a1aa]">{fixture?.competition ?? "World Cup Demo Match"} · simulated match for the on-chain settlement demo</p>
         </div>
-        <div className="rounded-lg border border-[#3b3b43] bg-[#111114]/70 px-5 py-4 text-center">
-          <div className="text-xs text-[#6f6f78]">World Cup Demo Match</div>
+        <div className="rounded-xl border border-white/[0.08] bg-[#0d0d11]/80 px-5 py-4 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+          <div className="text-[10px] font-extrabold uppercase tracking-[0.13em] text-[#6f6f78]">Demo scoreboard</div>
           <div className="mt-2 flex items-center justify-center gap-3">
             <span className="text-sm font-semibold text-[#c9c9ce]">{homeCode}</span>
             <span className="font-heading text-4xl font-bold text-white">
@@ -596,7 +652,7 @@ function WindowSelector({
   onSelect: (window: LiveGoalWindowMinutes) => void;
 }) {
   return (
-    <section className="rounded-lg border border-[#29292f] bg-[#141418] p-3">
+    <section className="rounded-2xl border border-white/[0.07] bg-gradient-to-b from-[#15151a] to-[#101014] p-3">
       <div className="grid grid-cols-3 gap-2">
         {LIVE_GOAL_WINDOWS.map(windowMinutes => (
           <button
@@ -629,6 +685,7 @@ function MarketCard({
   claimTx,
   onCreate,
   busy,
+  admin,
 }: {
   fixture?: TxLineFixture;
   market?: LiveGoalMarketMetadata;
@@ -639,6 +696,7 @@ function MarketCard({
   claimTx?: string;
   onCreate: () => void;
   busy: boolean;
+  admin: boolean;
 }) {
   const yesPool = getPoolLamports(poll, YES_INDEX);
   const noPool = getPoolLamports(poll, NO_INDEX);
@@ -648,18 +706,18 @@ function MarketCard({
   const isResolved = status === "RESOLVED" || status === "CLAIMABLE";
   const title = selectedWindow === 45 ? "Goal Before Half/Full Time?" : `Goal in Next ${selectedWindow}m?`;
   const prompt = selectedWindow === 45
-    ? "hill either team score before the end of this half?"
-    : `hill either team score before ${formatWindowEndMinute(fixture, market, selectedWindow)}?`;
+    ? "Will either team score before the end of this half?"
+    : `Will either team score before ${formatWindowEndMinute(fixture, market, selectedWindow)}?`;
 
   return (
-    <section className="rounded-lg border border-[#29292f] bg-[#141418] p-4">
+    <section className="rounded-2xl border border-white/[0.07] bg-gradient-to-b from-[#15151a] to-[#101014] p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="text-sm text-[#20d38a]">Live football window</div>
           <h2 className="mt-1 font-heading text-3xl font-bold text-white">{title}</h2>
           <p className="mt-1 text-sm text-[#a1a1aa]">{prompt}</p>
         </div>
-        <StatusPill status={market ? status : "CANCELLED"} label={market ? status : "Not created"} />
+        <StatusPill status={market ? status : "CANCELLED"} label={market ? status : "Not open yet"} />
       </div>
 
       {market ? (
@@ -721,18 +779,32 @@ function MarketCard({
           </div>
         </div>
       ) : (
-        <div className="mt-5 rounded-lg border border-[#29292f] bg-[#111114]/40 p-4">
-          <p className="text-sm text-[#a1a1aa]">
-            Open this short-window market on-chain, then buy YES or NO positions from the trade panel.
-          </p>
-          <button
-            onClick={onCreate}
-            disabled={busy || !fixture}
-            className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 text-sm font-bold text-[#0a0a0c] transition hover:bg-brand-400 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Zap size={16} />
-            Create {selectedWindow} min market
-          </button>
+        <div className="mt-5 rounded-xl border border-white/[0.06] bg-[#101014] p-4">
+          {admin ? (
+            <>
+              <p className="text-sm text-[#a1a1aa]">
+                Open this short-window market on-chain as the house. Traders can then buy YES or NO positions from the trade panel.
+              </p>
+              <button
+                onClick={onCreate}
+                disabled={busy || !fixture}
+                className="mt-4 inline-flex items-center justify-center gap-2 rounded-full bg-brand-500 px-5 py-3 text-sm font-bold text-[#0a0a0c] transition hover:bg-brand-400 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Zap size={16} />
+                Open {selectedWindow} min market
+              </button>
+            </>
+          ) : (
+            <div className="flex items-start gap-3">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-white/[0.08] bg-white/[0.04] text-[#7ce8bb]"><Clock size={16} /></span>
+              <div>
+                <p className="text-sm font-semibold text-white">This window hasn&apos;t opened yet</p>
+                <p className="mt-1 text-sm leading-6 text-[#a1a1aa]">
+                  Live goal windows are opened by Whistly when a match kicks off — markets aren&apos;t user-created. Check the upcoming schedule above for the next kickoff.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </section>
@@ -757,7 +829,7 @@ function TimelineCard({
   const hasGoal = Boolean(market && fixture && fixture.homeScore + fixture.awayScore > market.startHomeScore + market.startAwayScore);
 
   return (
-    <section className="rounded-lg border border-[#29292f] bg-[#141418] p-4">
+    <section className="rounded-2xl border border-white/[0.07] bg-gradient-to-b from-[#15151a] to-[#101014] p-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-white">Goal-window timeline</h3>
         <span className="text-xs text-[#a1a1aa]">Window progress</span>
@@ -806,7 +878,7 @@ function InfoTabs({
   mockMode: boolean;
 }) {
   return (
-    <section className="rounded-lg border border-[#29292f] bg-[#141418]">
+    <section className="rounded-2xl border border-white/[0.07] bg-gradient-to-b from-[#15151a] to-[#101014]">
       <div className="flex overflow-x-auto border-b border-[#29292f] p-2">
         {marketTabs.map(tab => {
           const Icon = tab.icon;
@@ -863,7 +935,7 @@ function TradePanel({
   const resolved = status === "RESOLVED" || status === "CLAIMABLE";
 
   return (
-    <section className="rounded-lg border border-[#29292f] bg-[#141418] p-4 shadow-2xl shadow-black/30">
+    <section className="rounded-2xl border border-white/[0.07] bg-gradient-to-b from-[#15151a] to-[#101014] p-4 shadow-2xl shadow-black/30">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-white">Buy Position</h3>
         {market && <StatusPill status={status} />}
@@ -910,7 +982,7 @@ function TradePanel({
           {locked && (
             <div className="rounded-lg border border-[#e6ff3e]/25 bg-[#e6ff3e]/[0.06] p-3 text-sm text-[#e4e8c9]">
               <div className="flex items-center gap-2 font-semibold"><Lock size={15} /> Market locked</div>
-              <div className="mt-1 text-xs">haiting for result...</div>
+              <div className="mt-1 text-xs">Waiting for result...</div>
             </div>
           )}
 
@@ -955,14 +1027,20 @@ function TradePanel({
       ) : (
         <div className="mt-4">
           <p className="text-sm text-[#a1a1aa]">No {windowMinutes}m market is open yet.</p>
-          <button
-            onClick={onCreate}
-            disabled={busy}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 text-sm font-bold text-[#0a0a0c] hover:bg-brand-400 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Zap size={16} />
-            Create market
-          </button>
+          {admin ? (
+            <button
+              onClick={onCreate}
+              disabled={busy}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-full bg-brand-500 px-4 py-3 text-sm font-bold text-[#0a0a0c] hover:bg-brand-400 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Zap size={16} />
+              Open market (house)
+            </button>
+          ) : (
+            <p className="mt-3 rounded-xl border border-white/[0.06] bg-[#101014] p-3 text-xs leading-5 text-[#8b8b94]">
+              Whistly opens live goal windows automatically at kickoff. Positions unlock the moment a market goes live.
+            </p>
+          )}
         </div>
       )}
     </section>
@@ -973,7 +1051,7 @@ function MobileTradeDrawer(props: TradePanelProps) {
   const { market, status, selectedPosition, setSelectedPosition, stakeCoins, setStakeCoins, busy, onCreate, onBuy, onClaim, userhon, vote, windowMinutes } = props;
   const resolved = status === "RESOLVED" || status === "CLAIMABLE";
   return (
-    <div className="sticky top-20 z-30 rounded-lg border border-[#29292f] bg-[#141418]/95 p-3 shadow-2xl shadow-black/30 backdrop-blur">
+    <div className="sticky top-20 z-30 rounded-2xl border border-white/[0.07] bg-gradient-to-b from-[#15151a] to-[#101014]/95 p-3 shadow-2xl shadow-black/30 backdrop-blur">
       {market ? (
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
@@ -1028,15 +1106,19 @@ function MobileTradeDrawer(props: TradePanelProps) {
             </button>
           </div>
         </div>
-      ) : (
+      ) : props.admin ? (
         <button
           onClick={onCreate}
           disabled={busy}
-          className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 text-sm font-bold text-[#0a0a0c] disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex w-full items-center justify-center gap-2 rounded-full bg-brand-500 px-4 py-3 text-sm font-bold text-[#0a0a0c] disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Zap size={16} />
-          Create {windowMinutes}m market
+          Open {windowMinutes}m market (house)
         </button>
+      ) : (
+        <p className="rounded-xl border border-white/[0.06] bg-[#101014] p-3 text-xs leading-5 text-[#8b8b94]">
+          No {windowMinutes}m market is open yet — Whistly opens live windows at kickoff.
+        </p>
       )}
     </div>
   );
@@ -1140,7 +1222,7 @@ function CommentsPanel({ market }: { market?: LiveGoalMarketMetadata }) {
     return (
       <div className="rounded-lg border border-[#29292f] bg-[#111114]/40 p-4 text-sm text-[#c9c9ce]">
         <div className="font-semibold text-white">Comments</div>
-        <p className="mt-2 text-[#a1a1aa]">Create this market first — comments attach to a specific market.</p>
+        <p className="mt-2 text-[#a1a1aa]">Comments attach to a specific market — they open once this window goes live.</p>
       </div>
     );
   }

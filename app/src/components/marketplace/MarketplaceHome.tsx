@@ -4,14 +4,16 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Activity, ArrowUpRight, CheckCircle2, ChevronLeft, ChevronRight, CircleDot, Gift, ShieldCheck, Sparkles, TrendingUp, WalletCards } from "lucide-react";
 import WalletConnectModal from "@/components/WalletConnectModal";
+import { useApp } from "@/components/Providers";
 import UpcomingFixtures from "@/components/UpcomingFixtures";
-import { FEATURED_MARKETS, LIVE_MARKETS, SOCCER_SPOTLIGHT, SPORTS_MARKETS, SPORT_TABS } from "@/lib/marketplaceData";
+import { FEATURED_MARKETS, LIVE_MARKETS, NEXT_KICKOFF, SOCCER_SPOTLIGHT, SPORTS_MARKETS, SPORT_TABS } from "@/lib/marketplaceData";
 import { FeaturedMarketCard, LiveMarketCard, MarketCard, SoccerSpotlightCard } from "./MarketCards";
+import CountdownTimer from "./CountdownTimer";
 
 const QUICK_PICKS = ["Goal", "Cards", "Corners", "Result"];
 
 const PROMO_SLIDES = [
-  { kicker: "World Cup Demo Mode", heading: "Trade the next moment.", copy: "Live football micro-markets on Solana devnet, built for fast reads and transparent settlement.", cta: "Open live market", href: "/live" },
+  { kicker: "World Cup Demo Mode", heading: "Trade the knockout rounds.", copy: "Semi-finals kick off Jul 15. Live micro-markets open at kickoff, built on Solana devnet for transparent settlement.", cta: "See semi-final markets", href: "/world-cup" },
   { kicker: "Builder demo offer", heading: "Practice with devnet SOL.", copy: "Every position, lock, and payout is verifiable on-chain. No real money is involved in demo mode.", cta: "Get devnet SOL", href: "/docs" },
 ] as const;
 
@@ -19,10 +21,10 @@ function PromoCard() {
   const [slide, setSlide] = useState(0);
   const active = PROMO_SLIDES[slide];
   return <section className="market-promo-card">
-    <p><Gift size={14} /> {active.kicker}</p>
+    <p><span className="market-promo-chip"><Gift size={12} /> {active.kicker}</span></p>
     <h2>{active.heading}</h2>
     <span>{active.copy}</span>
-    <Link href={active.href} className="market-cta light">{active.cta}</Link>
+    <Link href={active.href} className="market-cta light">{active.cta} <ArrowUpRight size={13} /></Link>
     <div className="market-carousel-controls">
       <button type="button" aria-label="Previous offer" onClick={() => setSlide(s => (s + PROMO_SLIDES.length - 1) % PROMO_SLIDES.length)}><ChevronLeft size={15} /></button>
       <div aria-hidden="true">{PROMO_SLIDES.map((item, index) => <i key={item.kicker} className={index === slide ? "active" : ""} />)}</div>
@@ -59,18 +61,21 @@ function QuickPick() {
   </section>;
 }
 
-function MarketplaceSidebar({ onWallet }: { onWallet: () => void }) {
+function MarketplaceSidebar({ onWallet, walletConnected, walletAddress }: { onWallet: () => void; walletConnected: boolean; walletAddress: string | null }) {
   return <aside className="market-sidebar" aria-label="Market status and actions">
     <PromoCard />
     <UpcomingFixtures limit={5} />
     <InfoCard />
     <StatusCard />
     <QuickPick />
-    <button type="button" className="market-rail-wallet" onClick={onWallet}><WalletCards size={15} /> Connect wallet to trade</button>
+    {walletConnected && walletAddress
+      ? <Link href="/portfolio" className="market-rail-wallet"><WalletCards size={15} /> {walletAddress.slice(0, 4)}…{walletAddress.slice(-4)} · My Positions</Link>
+      : <button type="button" className="market-rail-wallet" onClick={onWallet}><WalletCards size={15} /> Connect wallet to trade</button>}
   </aside>;
 }
 
 export default function MarketplaceHome() {
+  const { walletConnected, walletAddress } = useApp();
   const [activeSport, setActiveSport] = useState<string>("All markets");
   const [walletOpen, setWalletOpen] = useState(false);
   const [featuredIndex, setFeaturedIndex] = useState(0);
@@ -97,11 +102,11 @@ export default function MarketplaceHome() {
 
   const markets = useMemo(() => activeSport === "All markets" ? SPORTS_MARKETS : SPORTS_MARKETS.filter(market => market.sport.toLowerCase().includes(activeSport.toLowerCase()) || market.tags.some(tag => tag.toLowerCase().includes(activeSport.toLowerCase()))), [activeSport]);
   const groups = [
-    { title: "World Cup goals", filter: "Goals", items: markets.filter(m => m.sport === "Goals" || m.sport === "Totals" || m.tags.includes("Goals")) },
-    { title: "Cards & corners", filter: "Cards", items: markets.filter(m => ["Cards", "Corners"].includes(m.sport) || m.tags.some(tag => ["Cards", "Corners"].includes(tag))) },
-    { title: "Match result", filter: "Match Result", items: markets.filter(m => m.sport === "Match Result" || m.tags.includes("Match Result")) },
+    { title: "World Cup goals", filter: "Goals", items: markets.filter(m => (m.sport === "Goals" || m.sport === "Totals" || m.tags.includes("Goals")) && m.status !== "ended") },
+    { title: "Match result", filter: "Match Result", items: markets.filter(m => (m.sport === "Match Result" || m.tags.includes("Match Result")) && m.status !== "ended") },
+    { title: "Settled quarter-finals", filter: "Settled", items: markets.filter(m => m.status === "ended") },
   ];
-  const spotlightGrid = SPORTS_MARKETS.filter(m => ["ned-por-o25", "esp-fra-btts", "arg-gap-15", "result-esp-or-draw"].includes(m.id));
+  const spotlightGrid = SPORTS_MARKETS.filter(m => ["sf1-o25", "sf1-btts", "sf2-gap", "sf2-result"].includes(m.id));
 
   return <div className="market-home">
     <div className="market-marketbar"><div><span className="market-marketbar-dot" /> Live market discovery</div><span>Solana devnet · simulated data</span></div>
@@ -130,7 +135,9 @@ export default function MarketplaceHome() {
 
         <section className="market-section market-live-section" aria-labelledby="live-markets-title">
           <header className="market-section-header"><div><span className="market-live-dot" aria-hidden="true" /><h2 id="live-markets-title">Live now <span>({LIVE_MARKETS.length})</span></h2></div><Link href="/live">Open live board <ChevronRight size={16} /></Link></header>
-          <div className="market-live-grid">{LIVE_MARKETS.slice(0, 3).map(market => <LiveMarketCard market={market} key={market.id} />)}</div>
+          {LIVE_MARKETS.length > 0
+            ? <div className="market-live-grid">{LIVE_MARKETS.slice(0, 3).map(market => <LiveMarketCard market={market} key={market.id} />)}</div>
+            : <div className="market-live-empty"><span>No matches are live right now.</span><span>Next kickoff — <strong>{NEXT_KICKOFF.title}</strong> ({NEXT_KICKOFF.label}) in</span><CountdownTimer value={NEXT_KICKOFF.countdown} target={NEXT_KICKOFF.kickoff} /><Link href="/world-cup">See schedule <ChevronRight size={14} /></Link></div>}
         </section>
 
         <section className="market-section" aria-labelledby="soccer-spotlight-title">
@@ -148,7 +155,7 @@ export default function MarketplaceHome() {
 
         <section className="market-trust-strip"><div><CircleDot size={16} /><strong>Built for transparent reads</strong><span>Market labels, settlement notes, and demo status stay visible at every step.</span></div><Link href="/verify">Read verification notes <ArrowUpRight size={14} /></Link></section>
       </div>
-      <MarketplaceSidebar onWallet={() => setWalletOpen(true)} />
+      <MarketplaceSidebar onWallet={() => setWalletOpen(true)} walletConnected={walletConnected} walletAddress={walletAddress} />
     </div>
 
     <WalletConnectModal isOpen={walletOpen} onClose={() => setWalletOpen(false)} />

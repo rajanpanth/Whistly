@@ -60,6 +60,10 @@ export async function POST(request: NextRequest) {
   setRuntimeApiToken(apiToken);
   setRuntimeGuestJwt(jwt);
 
+  // Server terminal only — never sent to the browser. Lets the operator persist
+  // the token in .env.local (and Vercel env vars) so activation survives restarts.
+  console.log(`[TxLINE] Activation succeeded. To persist across restarts, add to .env.local:\nTXLINE_API_TOKEN=${apiToken}`);
+
   return NextResponse.json({
     ok: true,
     message: "TxLINE free tier activated. Real fixture and score data is now enabled.",
