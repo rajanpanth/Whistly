@@ -111,15 +111,15 @@ export default function PortfolioPage() {
 
     if (!walletConnected) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-                <Wallet size={48} className="text-brand-500 opacity-50" />
-                <h2 className="text-xl font-semibold text-neutral-200">Connect your wallet</h2>
-                <p className="text-sm text-neutral-400 text-center max-w-sm">
+            <div className="mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center gap-4 rounded-2xl border border-[#29292f] bg-[#141418] p-8 text-center">
+                <Wallet size={44} className="text-[#6f6f78]" />
+                <h2 className="font-heading text-xl font-bold uppercase tracking-[-0.02em] text-[#f4f4f5]">Connect your wallet</h2>
+                <p className="max-w-sm text-center text-sm leading-6 text-[#a1a1aa]">
                     Connect your wallet to view your portfolio, active positions, and P&L.
                 </p>
                 <button
                     onClick={connectWallet}
-                    className="px-6 py-2.5 bg-brand-600 hover:bg-brand-700 rounded-xl text-sm font-medium transition-colors"
+                    className="rounded-[0.65rem] bg-[#f4f4f5] px-6 py-2.5 text-sm font-bold text-[#0a0a0c] transition hover:bg-white"
                 >
                     Connect Wallet
                 </button>
@@ -130,14 +130,17 @@ export default function PortfolioPage() {
     return (
         <div className="max-w-4xl mx-auto">
             {/* Header */}
-            <div className="flex items-center justify-between mb-6">
-                <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-brand-400 to-accent-400 bg-clip-text text-transparent pb-1 shrink-0">
-                    My Positions
-                </h1>
+            <div className="mb-6 flex items-end justify-between rounded-2xl border border-[#29292f] bg-[#19191d] p-6">
+                <div>
+                    <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#a1a1aa]">Portfolio</div>
+                    <h1 className="mt-2 shrink-0 font-heading text-2xl font-bold uppercase tracking-[-0.03em] text-white sm:text-3xl">
+                        My Positions
+                    </h1>
+                </div>
                 {userAccount && (
-                    <div className="text-right">
-                        <div className="text-xs text-neutral-500">Balance</div>
-                        <div className="text-lg font-bold text-neutral-200">{formatDollars(userAccount.balance)}</div>
+                    <div className="rounded-xl border border-[#29292f] bg-[#111114] px-4 py-3 text-right">
+                        <div className="text-[10px] uppercase tracking-wider text-[#6f6f78]">Balance</div>
+                        <div className="font-mono text-lg font-bold text-[#e6e6e9]">{formatDollars(userAccount.balance)}</div>
                     </div>
                 )}
             </div>
@@ -177,7 +180,7 @@ export default function PortfolioPage() {
             </div>
 
             {/* Filter Tabs */}
-            <div className="flex gap-1.5 mb-4 bg-surface-100 rounded-xl p-1 border border-border w-fit">
+            <div className="mb-4 flex w-fit gap-1 rounded-[0.65rem] border border-[#29292f] bg-[#111114] p-1">
                 {([
                     { key: "all", label: "All positions", count: positions.length },
                     { key: "active", label: "Open positions", count: activeCount },
@@ -187,9 +190,9 @@ export default function PortfolioPage() {
                     <button
                         key={key}
                         onClick={() => setActiveTab(key)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${activeTab === key
-                            ? "bg-brand-500/20 text-brand-400 shadow-sm"
-                            : "text-neutral-400 hover:text-neutral-200"
+                        className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-all ${activeTab === key
+                            ? "bg-[#f4f4f5] text-[#0a0a0c]"
+                            : "text-[#898991] hover:text-white"
                             }`}
                     >
                         {label}
@@ -201,15 +204,15 @@ export default function PortfolioPage() {
             {/* Positions List */}
             {filteredPositions.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 gap-3">
-                    <AlertCircle size={32} className="text-neutral-500" />
-                    <p className="text-sm text-neutral-400">
+                    <AlertCircle size={32} className="text-[#6f6f78]" />
+                    <p className="text-sm text-[#a1a1aa]">
                         {activeTab === "all"
                             ? "No positions yet. Trade a YES/NO market to get started!"
                             : `No ${activeTab} positions.`}
                     </p>
                     <Link
                         href="/events"
-                        className="flex items-center gap-1 text-xs text-brand-400 hover:text-brand-300 transition-colors"
+                        className="flex items-center gap-1 rounded-[0.65rem] bg-[#f4f4f5] px-4 py-2 text-xs font-bold text-[#0a0a0c] transition hover:bg-white"
                     >
                         Browse markets <ArrowRight size={12} />
                     </Link>
@@ -239,18 +242,18 @@ function SummaryCard({
     color: string;
 }) {
     const colorClasses: Record<string, string> = {
-        brand: "text-brand-400 bg-brand-500/10 border-brand-500/15",
-        green: "text-green-400 bg-green-500/10 border-green-500/15",
-        red: "text-red-400 bg-red-500/10 border-red-500/15",
-        blue: "text-blue-400 bg-blue-500/10 border-blue-500/15",
-        yellow: "text-yellow-400 bg-yellow-500/10 border-yellow-500/15",
-        gray: "text-neutral-400 bg-neutral-500/10 border-neutral-500/15",
+        brand: "text-[#e6e6e9]",
+        green: "text-[#7ce8bb]",
+        red: "text-[#f78ba0]",
+        blue: "text-[#e6e6e9]",
+        yellow: "text-[#d8ec52]",
+        gray: "text-[#a1a1aa]",
     };
 
     return (
-        <div className={`p-3 rounded-xl border ${colorClasses[color] || colorClasses.gray}`}>
-            <div className="flex items-center gap-1.5 mb-1 opacity-70">{icon}<span className="text-[10px]">{label}</span></div>
-            <div className="text-lg font-bold">{value}</div>
+        <div className={`rounded-xl border border-[#29292f] bg-[#141418] p-3 ${colorClasses[color] || colorClasses.gray}`}>
+            <div className="mb-1 flex items-center gap-1.5 text-[#8b8b94]">{icon}<span className="text-[10px] font-bold uppercase tracking-wider">{label}</span></div>
+            <div className="font-mono text-lg font-bold">{value}</div>
         </div>
     );
 }
@@ -260,10 +263,10 @@ function PositionCard({ position, onClaim }: { position: Position; onClaim: (pol
     const [claiming, setClaiming] = useState(false);
 
     const statusConfig: Record<PositionStatus, { icon: React.ReactNode; label: string; color: string }> = {
-        active: { icon: <Clock size={14} />, label: "Active", color: "text-blue-400" },
-        won: { icon: <CheckCircle size={14} />, label: "Won", color: "text-green-400" },
-        lost: { icon: <TrendingDown size={14} />, label: "Lost", color: "text-red-400" },
-        claimable: { icon: <Gift size={14} />, label: "Claimable", color: "text-yellow-400" },
+        active: { icon: <Clock size={14} />, label: "Active", color: "text-[#a1a1aa]" },
+        won: { icon: <CheckCircle size={14} />, label: "Won", color: "text-[#7ce8bb]" },
+        lost: { icon: <TrendingDown size={14} />, label: "Lost", color: "text-[#f78ba0]" },
+        claimable: { icon: <Gift size={14} />, label: "Claimable", color: "text-[#d8ec52]" },
     };
 
     const sc = statusConfig[status];
@@ -280,30 +283,30 @@ function PositionCard({ position, onClaim }: { position: Position; onClaim: (pol
     return (
         <Link
             href={`/polls/${poll.id}`}
-            className="flex items-center gap-3 p-3 sm:p-4 bg-surface-100 border border-border rounded-xl hover:border-brand-500/30 transition-all group"
+            className="group flex items-center gap-3 rounded-xl border border-[#29292f] bg-[#19191d] p-3 transition-all hover:border-[#3b3b43] hover:bg-[#1e1e23] sm:p-4"
         >
             {/* Status icon */}
             <div className={`shrink-0 ${sc.color}`}>{sc.icon}</div>
 
             {/* Poll info */}
             <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-neutral-200 truncate group-hover:text-brand-400 transition-colors">
+                <div className="text-sm font-medium text-[#e6e6e9] truncate group-hover:text-white transition-colors">
                     {poll.title}
                 </div>
-                <div className="flex items-center gap-2 text-[11px] text-neutral-500 mt-0.5">
+                <div className="flex items-center gap-2 text-[11px] text-[#6f6f78] mt-0.5">
                     <span className="truncate">Your side: {poll.options[optionIndex] || `Option ${optionIndex}`}</span>
                     <span>·</span>
                     <span>{coins} coins</span>
                     <span>·</span>
                     <span>{formatDollarsShort(staked)} staked</span>
                 </div>
-                <div className="mt-1 flex flex-wrap gap-3 text-[10px] text-neutral-600"><span>Estimated payout: {status === "active" ? "Pending" : formatDollarsShort(Math.max(0, staked + pnl))}</span><span>Settlement tx: unavailable</span><span>Claim tx: unavailable</span></div>
+                <div className="mt-1 flex flex-wrap gap-3 text-[10px] text-[#6f6f78]"><span>Estimated payout: {status === "active" ? "Pending" : formatDollarsShort(Math.max(0, staked + pnl))}</span><span>Settlement tx: unavailable</span><span>Claim tx: unavailable</span></div>
             </div>
 
             {/* P&L + action */}
             <div className="flex items-center gap-2 shrink-0">
                 {status !== "active" && (
-                    <span className={`text-sm font-bold ${pnl >= 0 ? "text-green-400" : "text-red-400"}`}>
+                    <span className={`text-sm font-bold ${pnl >= 0 ? "text-[#7ce8bb]" : "text-[#f78ba0]"}`}>
                         {pnl >= 0 ? "+" : ""}{formatDollarsShort(pnl)}
                     </span>
                 )}
@@ -315,12 +318,12 @@ function PositionCard({ position, onClaim }: { position: Position; onClaim: (pol
                             handleClaim();
                         }}
                         disabled={claiming}
-                        className="px-3 py-1 text-[10px] font-semibold bg-yellow-500/20 text-yellow-400 border border-yellow-500/30 rounded-lg hover:bg-yellow-500/30 transition-colors disabled:opacity-50"
+                        className="px-3 py-1 text-[10px] font-semibold rounded-lg border border-[#d8ec52]/30 bg-[#d8ec52]/15 text-[#d8ec52] hover:bg-[#d8ec52]/25 transition-colors disabled:opacity-50"
                     >
                         {claiming ? "..." : "Claim"}
                     </button>
                 )}
-                <ArrowRight size={14} className="text-neutral-600 group-hover:text-neutral-400 transition-colors" />
+                <ArrowRight size={14} className="text-[#6f6f78] group-hover:text-[#a1a1aa] transition-colors" />
             </div>
         </Link>
     );

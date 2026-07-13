@@ -2,6 +2,8 @@
 
 import { AlertTriangle, CheckCircle2, Database, ShieldCheck, WifiOff } from "lucide-react";
 import DataHealthWidget from "@/components/kicktick/DataHealthWidget";
+import TxLineActivation from "@/components/TxLineActivation";
+import UpcomingFixtures from "@/components/UpcomingFixtures";
 
 const STATUS_ITEMS = [
   { label: "Network", value: "Devnet", ok: true },
@@ -29,6 +31,9 @@ export default function TxLineSetupPage() {
         </p>
       </header>
 
+      <TxLineActivation />
+      <UpcomingFixtures />
+
       {/* Warning */}
       <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-200">
         <AlertTriangle className="mt-0.5 shrink-0" size={18} />
@@ -37,9 +42,11 @@ export default function TxLineSetupPage() {
             TxLINE real credentials not configured.
           </div>
           <div className="mt-1 text-amber-100/80">
-            Demo mode is using simulated TxLINE-compatible data. To connect to
-            real TxLINE endpoints, configure TXLINE_BASE_URL, TXLINE_SESSION_TOKEN,
-            and TXLINE_API_TOKEN in your environment variables.
+            Without credentials the app fails closed and settlement is disabled.
+            To connect to real TxLINE endpoints, configure TXLINE_BASE_URL,
+            TXLINE_GUEST_JWT, and TXLINE_API_TOKEN in your environment variables.
+            Mock data is only used when NEXT_PUBLIC_ENABLE_MOCK_MODE=true and is
+            clearly labeled.
           </div>
         </div>
       </div>

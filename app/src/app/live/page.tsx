@@ -22,6 +22,8 @@ import {
 import { useApp } from "@/components/Providers";
 import DataHealthWidget from "@/components/kicktick/DataHealthWidget";
 import SettlementProof from "@/components/kicktick/SettlementProof";
+import PollComments from "@/components/PollComments";
+import LiveMarketGraph from "@/components/LiveMarketGraph";
 import { isAdminWallet } from "@/lib/constants";
 import {
   buildLiveGoalMarketTitle,
@@ -39,9 +41,13 @@ import type { TxLineFixture } from "@/lib/txline/mock";
 import { PollStatus, WINNING_OPTION_UNSET, type DemoPoll } from "@/lib/types";
 
 type FixturesResponse = {
-  mockMode: boolean;
-  fixtures: TxLineFixture[];
+  mockMode?: boolean;
+  source?: "txline" | "mock";
+  fixtures?: TxLineFixture[];
+  error?: string;
 };
+
+type TxLineUiState = "loading" | "connected" | "mock" | "not_configured" | "error";
 
 type MarketsResponse = {
   markets: LiveGoalMarketMetadata[];
@@ -75,7 +81,8 @@ export default function LiveGoalMarketsPage() {
   } = useApp();
 
   const [fixtures, setFixtures] = useState<TxLineFixture[]>([]);
-  const [mockMode, setMockMode] = useState(true);
+  const [txlineState, setTxlineState] = useState<TxLineUiState>("loading");
+  const mockMode = txlineState === "mock";
   const [markets, setMarkets] = useState<LiveGoalMarketMetadata[]>([]);
   const [selectedWindow, setSelectedWindow] = useState<LiveGoalWindowMinutes>(5);
   const [selectedPosition, setSelectedPosition] = useState<LiveGoalOutcome>("YES");
@@ -89,12 +96,18 @@ export default function LiveGoalMarketsPage() {
   const admin = isAdminWallet(walletAddress);
 
   const refresh = useCallback(async () => {
-    const [fixturesRes, marketsRes] = await Promise.all([
-      fetch("/api/txline/fixtures").then(res => res.json() as Promise<FixturesResponse>),
+    const [fixturesHttp, marketsRes] = await Promise.all([
+      fetch("/api/txline/fixtures"),
       fetch("/api/markets/create-live-goal").then(res => res.json() as Promise<MarketsResponse>),
     ]);
-    setFixtures(fixturesRes.fixtures);
-    setMockMode(fixturesRes.mockMode);
+    const fixturesRes = await fixturesHttp.json() as FixturesResponse;
+    if (fixturesHttp.ok && fixturesRes.fixtures) {
+      setFixtures(fixturesRes.fixtures);
+      setTxlineState(fixturesRes.source === "mock" ? "mock" : "connected");
+    } else {
+      setFixtures([]);
+      setTxlineState(fixturesRes.error === "txline_not_configured" ? "not_configured" : "error");
+    }
     setMarkets(marketsRes.markets);
   }, []);
 
@@ -132,8 +145,10 @@ export default function LiveGoalMarketsPage() {
     ? (selectedVote.votesPerOption[selectedPoll.winningOption] || 0) > 0
     : false;
 
+  const dataAvailable = txlineState === "connected" || txlineState === "mock";
+
   const createLiveMarket = async (windowMinutes: LiveGoalWindowMinutes) => {
-    if (!fixture) return;
+    if (!fixture || !dataAvailable) return;
     if (!walletConnected || !walletAddress) {
       await connectWallet();
       return;
@@ -218,12 +233,13 @@ export default function LiveGoalMarketsPage() {
   };
 
   const resolveMarket = async (market: LiveGoalMarketMetadata) => {
+    if (!dataAvailable) return;
     setBusyiey(`resolve-${market.id}`);
     try {
       const res = await fetch("/api/markets/resolve-live-goal", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ marketId: market.id, forceDemo: true }),
+        body: JSON.stringify({ marketId: market.id, forceDemo: mockMode }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "resolve_failed");
@@ -236,7 +252,7 @@ export default function LiveGoalMarketsPage() {
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
               marketId: market.id,
-              forceDemo: true,
+              forceDemo: mockMode,
               settlementTx,
             }),
           });
@@ -262,7 +278,7 @@ export default function LiveGoalMarketsPage() {
 
   return (
     <div className="min-h-screen pb-36 text-neutral-100 lg:pb-8">
-      <HeroHeader mockMode={mockMode} />
+      <HeroHeader txlineState={txlineState} />
 
       <div className="mt-5 grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)_320px]">
         <aside className="hidden space-y-3 lg:block">
@@ -272,7 +288,7 @@ export default function LiveGoalMarketsPage() {
             marketsByWindow={marketsByWindow}
             onSelect={setSelectedWindow}
           />
-          <DemoControls busyiey={busyiey} onScenario={simulateScenario} />
+          {mockMode && <DemoControls busyiey={busyiey} onScenario={simulateScenario} />}
         </aside>
 
         <main className="min-w-0 space-y-4">
@@ -324,6 +340,14 @@ export default function LiveGoalMarketsPage() {
             status={selectedStatus}
             nowSeconds={nowSeconds}
           />
+          {selectedMarket && selectedPoll && (
+            <LiveMarketGraph
+              marketId={selectedMarket.id}
+              yesCount={selectedPoll.voteCounts[YES_INDEX] ?? 0}
+              noCount={selectedPoll.voteCounts[NO_INDEX] ?? 0}
+              title={selectedPoll.title}
+            />
+          )}
           <InfoTabs
             activeTab={activeTab}
             setActiveTab={setActiveTab}
@@ -376,41 +400,62 @@ export default function LiveGoalMarketsPage() {
       </div>
 
       <div className="lg:hidden">
-        <DemoControlsCompact busyiey={busyiey} onScenario={simulateScenario} />
+        {mockMode && <DemoControlsCompact busyiey={busyiey} onScenario={simulateScenario} />}
       </div>
     </div>
   );
 }
 
-function HeroHeader({ mockMode }: { mockMode: boolean }) {
+function HeroHeader({ txlineState }: { txlineState: TxLineUiState }) {
+  const stateBadge = txlineState === "connected"
+    ? { label: "TXLINE CONNECTED", className: "border-[#20d38a]/40 bg-[#20d38a]/10 text-[#20d38a]" }
+    : txlineState === "mock"
+      ? { label: "MOCK TxLINE", className: "border-[#e6ff3e]/30 bg-[#e6ff3e]/[0.08] text-[#d8ec52]" }
+      : txlineState === "loading"
+        ? { label: "CHECKING TxLINE…", className: "border-[#3b3b43] bg-white/[0.04] text-[#a1a1aa]" }
+        : txlineState === "error"
+          ? { label: "TXLINE ERROR", className: "border-[#fa4669]/40 bg-[#fa4669]/10 text-[#f78ba0]" }
+          : { label: "TXLINE NOT CONFIGURED", className: "border-[#fa4669]/40 bg-[#fa4669]/10 text-[#f78ba0]" };
   return (
-    <header className="rounded-lg border border-slate-800 bg-[#07101b] p-4 shadow-2xl shadow-black/20 sm:p-5">
+    <header className="rounded-lg border border-[#29292f] bg-[#19191d] p-4 shadow-2xl shadow-black/20 sm:p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <div className="flex flex-wrap gap-2 text-xs font-semibold">
-            <Badge className="border-red-500/40 bg-red-500/10 text-red-300"><Flame size={13} /> LIVE</Badge>
+            <Badge className="border-[#fa4669]/40 bg-[#fa4669]/10 text-[#f78ba0]"><Flame size={13} /> LIVE</Badge>
             <Badge className="border-violet-500/40 bg-violet-500/10 text-violet-300">DEVNET</Badge>
-            <Badge className="border-blue-500/40 bg-blue-500/10 text-blue-300">MOCK TxLINE</Badge>
+            <Badge className={stateBadge.className}>{stateBadge.label}</Badge>
           </div>
           <h1 className="mt-4 font-heading text-3xl font-bold text-white sm:text-4xl">
             iickTick Live Markets
           </h1>
-          <p className="mt-2 max-w-3xl text-sm text-slate-300">
-            Trade every football moment before the clock runs out. Markets resolve from TxLINE-compatible score data, not majority vote.
+          <p className="mt-2 max-w-3xl text-sm text-[#c9c9ce]">
+            Trade every football moment before the clock runs out. Devnet SOL only. Markets resolve from score data, not majority vote.
           </p>
         </div>
-        <div className="rounded-lg border border-blue-500/25 bg-blue-500/10 p-3 text-sm text-blue-100">
+        <div className="rounded-lg border border-[#20d38a]/25 bg-[#20d38a]/10 p-3 text-sm text-[#b9f0d6]">
           <div className="flex items-center gap-2 font-semibold">
             <ShieldCheck size={16} />
             Resolution source
           </div>
-          <p className="mt-1 text-xs text-blue-200/80">Resolved by TxLINE-compatible score data.</p>
+          <p className="mt-1 text-xs text-[#7ce8bb]/80">
+            {txlineState === "connected" ? "Resolved by TxLINE score data." : txlineState === "mock" ? "Mock Mode — resolved from labeled mock scores." : "Settlement disabled until TxLINE is configured."}
+          </p>
         </div>
       </div>
-      {mockMode && (
-        <div className="mt-4 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+      {txlineState === "mock" && (
+        <div className="mt-4 flex items-start gap-2 rounded-lg border border-[#e6ff3e]/25 bg-[#e6ff3e]/[0.06] p-3 text-sm text-[#e4e8c9]">
           <AlertTriangle className="mt-0.5 shrink-0" size={16} />
-          <span>Demo mode: using simulated TxLINE-compatible match data.</span>
+          <span>Mock Mode Enabled — not real TxLINE data. Markets resolve from labeled mock scores.</span>
+        </div>
+      )}
+      {(txlineState === "not_configured" || txlineState === "error") && (
+        <div className="mt-4 flex items-start gap-2 rounded-lg border border-[#fa4669]/25 bg-[#fa4669]/[0.06] p-3 text-sm text-[#f8c0cb]">
+          <AlertTriangle className="mt-0.5 shrink-0" size={16} />
+          <span>
+            {txlineState === "not_configured"
+              ? "TxLINE Not Configured — market creation and settlement are disabled. Set TXLINE_BASE_URL, TXLINE_GUEST_JWT, and TXLINE_API_TOKEN, or explicitly enable mock mode."
+              : "TxLINE Error — live data request failed. Settlement is disabled until TxLINE responds."}
+          </span>
         </div>
       )}
     </header>
@@ -429,14 +474,14 @@ function LiveMatchesPanel({
   onSelect: (window: LiveGoalWindowMinutes) => void;
 }) {
   return (
-    <section className="rounded-lg border border-slate-800 bg-[#08111f] p-3">
-      <div className="mb-3 text-sm font-semibold text-slate-200">Live matches</div>
-      <div className="rounded-lg bg-slate-950/60 p-3">
-        <div className="text-xs text-slate-400">{fixture?.competition ?? "World Cup Demo Match"}</div>
+    <section className="rounded-lg border border-[#29292f] bg-[#141418] p-3">
+      <div className="mb-3 text-sm font-semibold text-[#e6e6e9]">Live matches</div>
+      <div className="rounded-lg bg-[#111114]/80 p-3">
+        <div className="text-xs text-[#a1a1aa]">{fixture?.competition ?? "World Cup Demo Match"}</div>
         <div className="mt-1 text-sm font-semibold text-white">
           {fixture ? `${fixture.homeTeam} vs ${fixture.awayTeam}` : "Loading match"}
         </div>
-        <div className="mt-2 flex items-center justify-between text-xs text-slate-300">
+        <div className="mt-2 flex items-center justify-between text-xs text-[#c9c9ce]">
           <span>{fixture ? formatMatchClock(fixture.clockSeconds) : "--:--"} LIVE</span>
           <span>{fixture ? `${fixture.homeScore} - ${fixture.awayScore}` : "- -"}</span>
         </div>
@@ -452,7 +497,7 @@ function LiveMatchesPanel({
               className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm transition ${
                 active
                   ? "border-brand-500/60 bg-brand-500/10 text-brand-100"
-                  : "border-slate-800 bg-slate-950/40 text-slate-300 hover:border-slate-700"
+                  : "border-[#29292f] bg-[#111114]/40 text-[#c9c9ce] hover:border-[#3b3b43]"
               }`}
             >
               <span>{windowMinutes}m window</span>
@@ -473,17 +518,17 @@ function DemoControls({
   onScenario: (scenario: "BASE" | "YES_GOAL" | "NO_GOAL") => void;
 }) {
   return (
-    <section className="rounded-lg border border-slate-800 bg-[#08111f] p-3">
-      <div className="flex items-center justify-between text-sm font-semibold text-slate-200">
+    <section className="rounded-lg border border-[#29292f] bg-[#141418] p-3">
+      <div className="flex items-center justify-between text-sm font-semibold text-[#e6e6e9]">
         Demo controls
-        <Gauge size={15} className="text-blue-300" />
+        <Gauge size={15} className="text-[#20d38a]" />
       </div>
       <div className="mt-3 space-y-2">
         <ScenarioButton disabled={busyiey !== null} onClick={() => onScenario("BASE")}>Start demo match</ScenarioButton>
         <ScenarioButton disabled={busyiey !== null} tone="yes" onClick={() => onScenario("YES_GOAL")}>Simulate goal: YES wins</ScenarioButton>
         <ScenarioButton disabled={busyiey !== null} tone="no" onClick={() => onScenario("NO_GOAL")}>Simulate no goal: NO wins</ScenarioButton>
       </div>
-      <p className="mt-3 text-xs leading-5 text-slate-500">Demo controls use simulated score data and do not replace on-chain settlement.</p>
+      <p className="mt-3 text-xs leading-5 text-[#6f6f78]">Demo controls use simulated score data and do not replace on-chain settlement.</p>
     </section>
   );
 }
@@ -508,28 +553,28 @@ function ScoreboardCard({ fixture }: { fixture?: TxLineFixture }) {
   const homeCode = fixture?.homeTeam.slice(0, 3).toUpperCase() ?? "ARG";
   const awayCode = fixture?.awayTeam.slice(0, 3).toUpperCase() ?? "BRA";
   return (
-    <section className="rounded-lg border border-slate-800 bg-[#08111f] p-4">
+    <section className="rounded-lg border border-[#29292f] bg-[#141418] p-4">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-sm text-red-300">
-            <span className="h-2 w-2 rounded-full bg-red-400" />
+          <div className="flex items-center gap-2 text-sm text-[#f78ba0]">
+            <span className="h-2 w-2 rounded-full bg-[#fa4669]" />
             {fixture ? `${formatMatchClock(fixture.clockSeconds)} LIVE` : "63:20 LIVE"}
           </div>
           <h2 className="mt-2 font-heading text-2xl font-bold text-white sm:text-3xl">
             {fixture ? `${fixture.homeTeam} vs ${fixture.awayTeam}` : "Argentina vs Brazil"}
           </h2>
-          <p className="mt-1 text-sm text-slate-400">{fixture?.competition ?? "World Cup Demo Match"}</p>
+          <p className="mt-1 text-sm text-[#a1a1aa]">{fixture?.competition ?? "World Cup Demo Match"}</p>
         </div>
-        <div className="rounded-lg border border-slate-700 bg-slate-950/70 px-5 py-4 text-center">
-          <div className="text-xs text-slate-500">World Cup Demo Match</div>
+        <div className="rounded-lg border border-[#3b3b43] bg-[#111114]/70 px-5 py-4 text-center">
+          <div className="text-xs text-[#6f6f78]">World Cup Demo Match</div>
           <div className="mt-2 flex items-center justify-center gap-3">
-            <span className="text-sm font-semibold text-slate-300">{homeCode}</span>
+            <span className="text-sm font-semibold text-[#c9c9ce]">{homeCode}</span>
             <span className="font-heading text-4xl font-bold text-white">
               {fixture ? `${fixture.homeScore} - ${fixture.awayScore}` : "1 - 1"}
             </span>
-            <span className="text-sm font-semibold text-slate-300">{awayCode}</span>
+            <span className="text-sm font-semibold text-[#c9c9ce]">{awayCode}</span>
           </div>
-          <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-1 text-xs text-blue-200">
+          <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-[#20d38a]/30 bg-[#20d38a]/10 px-2 py-1 text-xs text-[#7ce8bb]">
             <BarChart3 size={13} />
             Resolved by TxLINE-compatible score data
           </div>
@@ -551,7 +596,7 @@ function WindowSelector({
   onSelect: (window: LiveGoalWindowMinutes) => void;
 }) {
   return (
-    <section className="rounded-lg border border-slate-800 bg-[#08111f] p-3">
+    <section className="rounded-lg border border-[#29292f] bg-[#141418] p-3">
       <div className="grid grid-cols-3 gap-2">
         {LIVE_GOAL_WINDOWS.map(windowMinutes => (
           <button
@@ -559,16 +604,16 @@ function WindowSelector({
             onClick={() => onSelect(windowMinutes)}
             className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${
               selectedWindow === windowMinutes
-                ? "border-brand-400 bg-brand-500 text-slate-950"
-                : "border-slate-700 bg-slate-950/40 text-slate-300 hover:border-slate-500"
+                ? "border-brand-400 bg-brand-500 text-[#0a0a0c]"
+                : "border-[#3b3b43] bg-[#111114]/40 text-[#c9c9ce] hover:border-[#55555e]"
             }`}
           >
             {windowMinutes} min
           </button>
         ))}
       </div>
-      <div className="mt-3 text-sm text-slate-400">
-        Window: <span className="text-slate-100">{formatWindowRange(fixture, market, selectedWindow)}</span>
+      <div className="mt-3 text-sm text-[#a1a1aa]">
+        Window: <span className="text-[#f4f4f5]">{formatWindowRange(fixture, market, selectedWindow)}</span>
       </div>
     </section>
   );
@@ -607,12 +652,12 @@ function MarketCard({
     : `hill either team score before ${formatWindowEndMinute(fixture, market, selectedWindow)}?`;
 
   return (
-    <section className="rounded-lg border border-slate-800 bg-[#08111f] p-4">
+    <section className="rounded-lg border border-[#29292f] bg-[#141418] p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <div className="text-sm text-blue-300">Live football window</div>
+          <div className="text-sm text-[#20d38a]">Live football window</div>
           <h2 className="mt-1 font-heading text-3xl font-bold text-white">{title}</h2>
-          <p className="mt-1 text-sm text-slate-400">{prompt}</p>
+          <p className="mt-1 text-sm text-[#a1a1aa]">{prompt}</p>
         </div>
         <StatusPill status={market ? status : "CANCELLED"} label={market ? status : "Not created"} />
       </div>
@@ -628,13 +673,13 @@ function MarketCard({
               <Metric label="Lock countdown" value={status === "OPEN" ? lockRemaining : status === "LOCKED" ? "Locked" : "Closed"} />
             </div>
 
-            <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4">
+            <div className="rounded-lg border border-[#29292f] bg-[#111114]/40 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-sm font-semibold text-white">Pool Book</div>
-                  <div className="mt-1 text-xs text-slate-500">Pool-based liquidity, not an order book.</div>
+                  <div className="mt-1 text-xs text-[#6f6f78]">Pool-based liquidity, not an order book.</div>
                 </div>
-                <div className="text-right text-xs text-slate-400">
+                <div className="text-right text-xs text-[#a1a1aa]">
                   <div>YES {yesProb}%</div>
                   <div>NO {noProb}%</div>
                 </div>
@@ -644,13 +689,13 @@ function MarketCard({
                 <PoolSide label="NO pool" value={formatSOL(noPool)} tone="no" />
               </div>
               <div className="mt-4">
-                <div className="mb-2 flex justify-between text-xs text-slate-400">
+                <div className="mb-2 flex justify-between text-xs text-[#a1a1aa]">
                   <span>YES</span>
                   <span>Implied probability</span>
                   <span>NO</span>
                 </div>
-                <div className="h-3 overflow-hidden rounded-full bg-red-500/50">
-                  <div className="h-full bg-green-400" style={{ width: `${yesProb}%` }} />
+                <div className="h-3 overflow-hidden rounded-full bg-[#fa4669]/50">
+                  <div className="h-full bg-[#20d38a]" style={{ width: `${yesProb}%` }} />
                 </div>
               </div>
             </div>
@@ -663,27 +708,27 @@ function MarketCard({
               </div>
             )}
           </div>
-          <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4">
+          <div className="rounded-lg border border-[#29292f] bg-[#111114]/40 p-4">
             <div className="text-sm font-semibold text-white">Resolution source</div>
-            <p className="mt-2 text-sm leading-6 text-slate-400">
+            <p className="mt-2 text-sm leading-6 text-[#a1a1aa]">
               The start score is recorded when the market opens. The end score is recorded when the window ends.
               Resolution uses TxLINE-compatible score data.
             </p>
-            <div className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 px-3 py-1 text-xs text-blue-200">
+            <div className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-[#20d38a]/30 bg-[#20d38a]/10 px-3 py-1 text-xs text-[#7ce8bb]">
               <BarChart3 size={13} />
               {market.resolutionSource === "MOCK" ? "Demo TxLINE-compatible data" : market.resolutionSource}
             </div>
           </div>
         </div>
       ) : (
-        <div className="mt-5 rounded-lg border border-slate-800 bg-slate-950/40 p-4">
-          <p className="text-sm text-slate-400">
+        <div className="mt-5 rounded-lg border border-[#29292f] bg-[#111114]/40 p-4">
+          <p className="text-sm text-[#a1a1aa]">
             Open this short-window market on-chain, then buy YES or NO positions from the trade panel.
           </p>
           <button
             onClick={onCreate}
             disabled={busy || !fixture}
-            className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 text-sm font-bold text-slate-950 transition hover:bg-brand-400 disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-4 inline-flex items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 text-sm font-bold text-[#0a0a0c] transition hover:bg-brand-400 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Zap size={16} />
             Create {selectedWindow} min market
@@ -712,26 +757,26 @@ function TimelineCard({
   const hasGoal = Boolean(market && fixture && fixture.homeScore + fixture.awayScore > market.startHomeScore + market.startAwayScore);
 
   return (
-    <section className="rounded-lg border border-slate-800 bg-[#08111f] p-4">
+    <section className="rounded-lg border border-[#29292f] bg-[#141418] p-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-white">Goal-window timeline</h3>
-        <span className="text-xs text-slate-400">Window progress</span>
+        <span className="text-xs text-[#a1a1aa]">Window progress</span>
       </div>
       <div className="mt-4">
-        <div className="mb-2 flex justify-between text-sm text-slate-400">
+        <div className="mb-2 flex justify-between text-sm text-[#a1a1aa]">
           <span>{market ? market.matchClockAtStart : "63:00"}</span>
           <span>{market ? formatWindowClock(market, fixture) : "68:00"}</span>
         </div>
-        <div className="relative h-3 rounded-full bg-slate-800">
-          <div className="h-full rounded-full bg-blue-400" style={{ width: `${progress}%` }} />
-          {hasGoal && <div className="absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full border-2 border-slate-950 bg-green-400" style={{ left: "52%" }} />}
+        <div className="relative h-3 rounded-full bg-[#232328]">
+          <div className="h-full rounded-full bg-[#20d38a]" style={{ width: `${progress}%` }} />
+          {hasGoal && <div className="absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full border-2 border-[#0c0c0f] bg-[#20d38a]" style={{ left: "52%" }} />}
         </div>
-        <div className="mt-3 grid gap-2 text-sm text-slate-400 sm:grid-cols-3">
+        <div className="mt-3 grid gap-2 text-sm text-[#a1a1aa] sm:grid-cols-3">
           <span>Start score: {market ? `${market.startHomeScore}-${market.startAwayScore}` : "1-1"}</span>
           <span>Current score: {fixture ? `${fixture.homeScore}-${fixture.awayScore}` : "1-1"}</span>
           <span>{status === "RESOLVING" || status === "RESOLVED" ? "Window ended" : `${remaining} remaining`}</span>
         </div>
-        <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950/40 p-3 text-sm text-slate-300">
+        <div className="mt-4 rounded-lg border border-[#29292f] bg-[#111114]/40 p-3 text-sm text-[#c9c9ce]">
           {hasGoal ? "Goal event: 65:30 Brazil goal" : "No goal in this window"}
         </div>
       </div>
@@ -761,8 +806,8 @@ function InfoTabs({
   mockMode: boolean;
 }) {
   return (
-    <section className="rounded-lg border border-slate-800 bg-[#08111f]">
-      <div className="flex overflow-x-auto border-b border-slate-800 p-2">
+    <section className="rounded-lg border border-[#29292f] bg-[#141418]">
+      <div className="flex overflow-x-auto border-b border-[#29292f] p-2">
         {marketTabs.map(tab => {
           const Icon = tab.icon;
           return (
@@ -770,7 +815,7 @@ function InfoTabs({
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`mr-2 inline-flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold ${
-                activeTab === tab.id ? "bg-slate-100 text-slate-950" : "text-slate-400 hover:bg-slate-900 hover:text-slate-100"
+                activeTab === tab.id ? "bg-[#f4f4f5] text-[#0a0a0c]" : "text-[#a1a1aa] hover:bg-[#19191d] hover:text-[#f4f4f5]"
               }`}
             >
               <Icon size={15} />
@@ -784,7 +829,7 @@ function InfoTabs({
         {activeTab === "activity" && <ActivityPanel market={market} fixture={fixture} claimTx={claimTx} mockMode={mockMode} />}
         {activeTab === "positions" && <PositionsPanel market={market} poll={poll} vote={vote} status={status} />}
         {activeTab === "holders" && <HoldersPanel poll={poll} mockMode={mockMode} />}
-        {activeTab === "comments" && <CommentsPanel mockMode={mockMode} />}
+        {activeTab === "comments" && <CommentsPanel market={market} />}
       </div>
     </section>
   );
@@ -818,7 +863,7 @@ function TradePanel({
   const resolved = status === "RESOLVED" || status === "CLAIMABLE";
 
   return (
-    <section className="rounded-lg border border-slate-800 bg-[#08111f] p-4 shadow-2xl shadow-black/30">
+    <section className="rounded-lg border border-[#29292f] bg-[#141418] p-4 shadow-2xl shadow-black/30">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-white">Buy Position</h3>
         {market && <StatusPill status={status} />}
@@ -834,9 +879,9 @@ function TradePanel({
                 className={`rounded-lg border px-4 py-3 text-sm font-bold ${
                   selectedPosition === position
                     ? position === "YES"
-                      ? "border-green-400 bg-green-400 text-slate-950"
-                      : "border-red-400 bg-red-400 text-slate-950"
-                    : "border-slate-700 bg-slate-950/50 text-slate-300"
+                      ? "border-[#20d38a] bg-[#20d38a] text-[#0a0a0c]"
+                      : "border-[#fa4669] bg-[#fa4669] text-[#0a0a0c]"
+                    : "border-[#3b3b43] bg-[#111114]/50 text-[#c9c9ce]"
                 }`}
               >
                 {position}
@@ -844,7 +889,7 @@ function TradePanel({
             ))}
           </div>
 
-          <label className="block text-sm text-slate-300">
+          <label className="block text-sm text-[#c9c9ce]">
             Stake
             <input
               type="number"
@@ -852,18 +897,18 @@ function TradePanel({
               max={100}
               value={stakeCoins}
               onChange={event => setStakeCoins(Math.max(1, Math.min(100, Number(event.target.value) || 1)))}
-              className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-3 text-right text-white outline-none focus:border-brand-400"
+              className="mt-2 w-full rounded-lg border border-[#3b3b43] bg-[#111114] px-3 py-3 text-right text-white outline-none focus:border-brand-400"
             />
           </label>
 
-          <div className="rounded-lg border border-slate-800 bg-slate-950/50 p-3 text-sm">
+          <div className="rounded-lg border border-[#29292f] bg-[#111114]/50 p-3 text-sm">
             <Row label="Position" value={selectedPosition} />
             <Row label="Stake" value={formatSOL(stakeCoins * UNIT_PRICE_LAMPORTS)} />
             <Row label="Estimated payout" value={formatSOL(estimatedPayout)} strong />
           </div>
 
           {locked && (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+            <div className="rounded-lg border border-[#e6ff3e]/25 bg-[#e6ff3e]/[0.06] p-3 text-sm text-[#e4e8c9]">
               <div className="flex items-center gap-2 font-semibold"><Lock size={15} /> Market locked</div>
               <div className="mt-1 text-xs">haiting for result...</div>
             </div>
@@ -881,20 +926,20 @@ function TradePanel({
             onClick={onBuy}
             disabled={!walletConnected || status !== "OPEN" || busy || isCreator}
             className={`flex w-full items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-45 ${
-              selectedPosition === "YES" ? "bg-green-400 text-slate-950 hover:bg-green-300" : "bg-red-400 text-slate-950 hover:bg-red-300"
+              selectedPosition === "YES" ? "bg-[#20d38a] text-[#0a0a0c] hover:bg-[#3ee0a4]" : "bg-[#fa4669] text-[#0a0a0c] hover:bg-[#fb6d88]"
             }`}
           >
             Buy {selectedPosition}
           </button>
 
-          {isCreator && <p className="text-xs text-amber-300">Creators cannot buy positions in their own market. Use a participant wallet.</p>}
-          {!walletConnected && <p className="text-xs text-slate-500">Connect wallet to buy a position.</p>}
+          {isCreator && <p className="text-xs text-[#d8ec52]">Creators cannot buy positions in their own market. Use a participant wallet.</p>}
+          {!walletConnected && <p className="text-xs text-[#6f6f78]">Connect wallet to buy a position.</p>}
 
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={onResolve}
               disabled={busy || !admin}
-              className="rounded-lg border border-blue-500/40 bg-blue-500/10 px-3 py-2 text-sm font-semibold text-blue-200 disabled:cursor-not-allowed disabled:opacity-45"
+              className="rounded-lg border border-[#20d38a]/40 bg-[#20d38a]/10 px-3 py-2 text-sm font-semibold text-[#7ce8bb] disabled:cursor-not-allowed disabled:opacity-45"
             >
               Resolve
             </button>
@@ -909,11 +954,11 @@ function TradePanel({
         </div>
       ) : (
         <div className="mt-4">
-          <p className="text-sm text-slate-400">No {windowMinutes}m market is open yet.</p>
+          <p className="text-sm text-[#a1a1aa]">No {windowMinutes}m market is open yet.</p>
           <button
             onClick={onCreate}
             disabled={busy}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 text-sm font-bold text-slate-950 hover:bg-brand-400 disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 text-sm font-bold text-[#0a0a0c] hover:bg-brand-400 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Zap size={16} />
             Create market
@@ -928,12 +973,12 @@ function MobileTradeDrawer(props: TradePanelProps) {
   const { market, status, selectedPosition, setSelectedPosition, stakeCoins, setStakeCoins, busy, onCreate, onBuy, onClaim, userhon, vote, windowMinutes } = props;
   const resolved = status === "RESOLVED" || status === "CLAIMABLE";
   return (
-    <div className="sticky top-20 z-30 rounded-lg border border-slate-800 bg-[#08111f]/95 p-3 shadow-2xl shadow-black/30 backdrop-blur">
+    <div className="sticky top-20 z-30 rounded-lg border border-[#29292f] bg-[#141418]/95 p-3 shadow-2xl shadow-black/30 backdrop-blur">
       {market ? (
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="text-xs text-slate-400">Buy Position</div>
+              <div className="text-xs text-[#a1a1aa]">Buy Position</div>
               <div className="text-sm font-semibold text-white">{resolved ? `Resolved: ${market.winningOutcome} won` : `${windowMinutes}m goal market`}</div>
             </div>
             <StatusPill status={status} />
@@ -946,9 +991,9 @@ function MobileTradeDrawer(props: TradePanelProps) {
                 className={`rounded-lg px-3 py-3 text-sm font-bold ${
                   selectedPosition === position
                     ? position === "YES"
-                      ? "bg-green-400 text-slate-950"
-                      : "bg-red-400 text-slate-950"
-                    : "border border-slate-700 text-slate-300"
+                      ? "bg-[#20d38a] text-[#0a0a0c]"
+                      : "bg-[#fa4669] text-[#0a0a0c]"
+                    : "border border-[#3b3b43] text-[#c9c9ce]"
                 }`}
               >
                 {position}
@@ -961,7 +1006,7 @@ function MobileTradeDrawer(props: TradePanelProps) {
               max={100}
               value={stakeCoins}
               onChange={event => setStakeCoins(Math.max(1, Math.min(100, Number(event.target.value) || 1)))}
-              className="rounded-lg border border-slate-700 bg-slate-950 px-2 text-right text-sm text-white"
+              className="rounded-lg border border-[#3b3b43] bg-[#111114] px-2 text-right text-sm text-white"
             />
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -969,7 +1014,7 @@ function MobileTradeDrawer(props: TradePanelProps) {
               onClick={onBuy}
               disabled={status !== "OPEN" || busy}
               className={`rounded-lg px-4 py-3 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-45 ${
-                selectedPosition === "YES" ? "bg-green-400 text-slate-950" : "bg-red-400 text-slate-950"
+                selectedPosition === "YES" ? "bg-[#20d38a] text-[#0a0a0c]" : "bg-[#fa4669] text-[#0a0a0c]"
               }`}
             >
               Buy {selectedPosition}
@@ -987,7 +1032,7 @@ function MobileTradeDrawer(props: TradePanelProps) {
         <button
           onClick={onCreate}
           disabled={busy}
-          className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 text-sm font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex w-full items-center justify-center gap-2 rounded-lg bg-brand-500 px-4 py-3 text-sm font-bold text-[#0a0a0c] disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Zap size={16} />
           Create {windowMinutes}m market
@@ -999,7 +1044,7 @@ function MobileTradeDrawer(props: TradePanelProps) {
 
 function RulesPanel() {
   return (
-    <div className="space-y-3 text-sm leading-6 text-slate-300">
+    <div className="space-y-3 text-sm leading-6 text-[#c9c9ce]">
       <p>This market resolves to YES if either team scores at least one goal during the selected time window.</p>
       <p>It resolves to NO if the total score does not increase before the window ends.</p>
       <p>The start score is recorded when the market opens. The end score is recorded when the window ends. Resolution uses TxLINE-compatible score data.</p>
@@ -1033,12 +1078,12 @@ function ActivityPanel({
   return (
     <div className="space-y-3">
       {events.map(event => (
-        <div key={`${event.time}-${event.text}`} className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-950/40 px-3 py-2 text-sm">
+        <div key={`${event.time}-${event.text}`} className="flex items-center justify-between gap-3 rounded-lg border border-[#29292f] bg-[#111114]/40 px-3 py-2 text-sm">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="w-12 shrink-0 text-slate-500">{event.time}</span>
-            <span className="truncate text-slate-200">{event.text}</span>
+            <span className="w-12 shrink-0 text-[#6f6f78]">{event.time}</span>
+            <span className="truncate text-[#e6e6e9]">{event.text}</span>
           </div>
-          <span className={`shrink-0 text-xs ${event.real ? "text-brand-300" : "text-amber-300"}`}>{event.real ? "on-chain" : "demo"}</span>
+          <span className={`shrink-0 text-xs ${event.real ? "text-brand-300" : "text-[#d8ec52]"}`}>{event.real ? "on-chain" : "demo"}</span>
         </div>
       ))}
     </div>
@@ -1065,15 +1110,15 @@ function PositionsPanel({
   const positionStatus = !vote ? "No position" : isResolved ? winning ? vote.claimed ? "Claimed" : "Claimable" : "Losing" : "Open";
 
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4">
-      <div className="text-sm text-slate-400">Your position</div>
+    <div className="rounded-lg border border-[#29292f] bg-[#111114]/40 p-4">
+      <div className="text-sm text-[#a1a1aa]">Your position</div>
       <div className="mt-2 flex flex-wrap items-center gap-3">
-        <span className={`rounded-lg px-3 py-1 text-sm font-bold ${position === "YES" ? "bg-green-400 text-slate-950" : "bg-red-400 text-slate-950"}`}>
+        <span className={`rounded-lg px-3 py-1 text-sm font-bold ${position === "YES" ? "bg-[#20d38a] text-[#0a0a0c]" : "bg-[#fa4669] text-[#0a0a0c]"}`}>
           {vote ? position : "--"}
         </span>
-        <span className="text-sm text-slate-300">Stake: {formatSOL(stake)}</span>
-        <span className="text-sm text-slate-300">Status: {positionStatus}</span>
-        <span className="text-sm text-slate-300">Estimated payout: {formatSOL(estimatePayout(poll, position === "YES" ? YES_INDEX : NO_INDEX, Math.max(1, (vote?.votesPerOption[position === "YES" ? YES_INDEX : NO_INDEX] ?? 0))))}</span>
+        <span className="text-sm text-[#c9c9ce]">Stake: {formatSOL(stake)}</span>
+        <span className="text-sm text-[#c9c9ce]">Status: {positionStatus}</span>
+        <span className="text-sm text-[#c9c9ce]">Estimated payout: {formatSOL(estimatePayout(poll, position === "YES" ? YES_INDEX : NO_INDEX, Math.max(1, (vote?.votesPerOption[position === "YES" ? YES_INDEX : NO_INDEX] ?? 0))))}</span>
       </div>
     </div>
   );
@@ -1090,44 +1135,49 @@ function HoldersPanel({ poll, mockMode }: { poll?: DemoPoll; mockMode: boolean }
   );
 }
 
-function CommentsPanel({ mockMode }: { mockMode: boolean }) {
+function CommentsPanel({ market }: { market?: LiveGoalMarketMetadata }) {
+  if (!market) {
+    return (
+      <div className="rounded-lg border border-[#29292f] bg-[#111114]/40 p-4 text-sm text-[#c9c9ce]">
+        <div className="font-semibold text-white">Comments</div>
+        <p className="mt-2 text-[#a1a1aa]">Create this market first — comments attach to a specific market.</p>
+      </div>
+    );
+  }
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-300">
-      <div className="font-semibold text-white">Comments</div>
-      <p className="mt-2 text-slate-400">
-        {mockMode ? "Demo placeholder: live comments are not connected in this hackathon demo." : "No comments yet."}
-      </p>
+    <div className="rounded-lg border border-[#29292f] bg-[#111114]/40 p-4">
+      <PollComments pollId={market.onchainMarketPubkey} />
     </div>
   );
 }
 
 function HolderList({ title, count, mockMode }: { title: string; count: number; mockMode: boolean }) {
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-4">
+    <div className="rounded-lg border border-[#29292f] bg-[#111114]/40 p-4">
       <div className="font-semibold text-white">{title}</div>
-      <div className="mt-3 space-y-2 text-sm text-slate-300">
+      <div className="mt-3 space-y-2 text-sm text-[#c9c9ce]">
         <div className="flex justify-between"><span>Current pool</span><span>{count} positions</span></div>
         <div className="flex justify-between"><span>{mockMode ? "Demo holder A" : "Holder A"}</span><span>{Math.max(0, count - 1)} positions</span></div>
         <div className="flex justify-between"><span>{mockMode ? "Demo holder B" : "Holder B"}</span><span>{count > 0 ? 1 : 0} positions</span></div>
       </div>
-      {mockMode && <p className="mt-3 text-xs text-amber-300">Demo placeholder: holder ranking is illustrative.</p>}
+      {mockMode && <p className="mt-3 text-xs text-[#d8ec52]">Demo placeholder: holder ranking is illustrative.</p>}
     </div>
   );
 }
 
 function Metric({ label, value, tone }: { label: string; value: string; tone?: "amber" }) {
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
-      <div className="text-xs text-slate-500">{label}</div>
-      <div className={`mt-1 text-sm font-semibold ${tone === "amber" ? "text-amber-300" : "text-white"}`}>{value}</div>
+    <div className="rounded-lg border border-[#29292f] bg-[#111114]/40 p-3">
+      <div className="text-xs text-[#6f6f78]">{label}</div>
+      <div className={`mt-1 text-sm font-semibold ${tone === "amber" ? "text-[#d8ec52]" : "text-white"}`}>{value}</div>
     </div>
   );
 }
 
 function PoolSide({ label, value, tone }: { label: string; value: string; tone: "yes" | "no" }) {
   return (
-    <div className={`rounded-lg border p-3 ${tone === "yes" ? "border-green-500/30 bg-green-500/10" : "border-red-500/30 bg-red-500/10"}`}>
-      <div className={`text-xs ${tone === "yes" ? "text-green-300" : "text-red-300"}`}>{label}</div>
+    <div className={`rounded-lg border p-3 ${tone === "yes" ? "border-[#20d38a]/30 bg-[#20d38a]/10" : "border-[#fa4669]/30 bg-[#fa4669]/10"}`}>
+      <div className={`text-xs ${tone === "yes" ? "text-[#7ce8bb]" : "text-[#f78ba0]"}`}>{label}</div>
       <div className="mt-1 text-lg font-bold text-white">{value}</div>
     </div>
   );
@@ -1135,12 +1185,12 @@ function PoolSide({ label, value, tone }: { label: string; value: string; tone: 
 
 function StatusPill({ status, label }: { status: LiveGoalStatus; label?: string }) {
   const styles: Record<LiveGoalStatus, string> = {
-    OPEN: "border-green-500/40 bg-green-500/10 text-green-300",
-    LOCKED: "border-amber-500/40 bg-amber-500/10 text-amber-300",
-    RESOLVING: "border-blue-500/40 bg-blue-500/10 text-blue-300",
+    OPEN: "border-[#20d38a]/40 bg-[#20d38a]/10 text-[#7ce8bb]",
+    LOCKED: "border-[#e6ff3e]/30 bg-[#e6ff3e]/[0.06] text-[#d8ec52]",
+    RESOLVING: "border-[#20d38a]/40 bg-[#20d38a]/10 text-[#20d38a]",
     RESOLVED: "border-brand-500/40 bg-brand-500/10 text-brand-200",
     CLAIMABLE: "border-brand-500/40 bg-brand-500/10 text-brand-200",
-    CANCELLED: "border-slate-700 bg-slate-900 text-slate-300",
+    CANCELLED: "border-[#3b3b43] bg-[#19191d] text-[#c9c9ce]",
   };
   return (
     <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${styles[status]}`}>
@@ -1162,15 +1212,15 @@ function ScenarioButton({
   tone?: "yes" | "no";
 }) {
   const toneClass = tone === "yes"
-    ? "border-green-500/30 bg-green-500/10 text-green-300"
+    ? "border-[#20d38a]/30 bg-[#20d38a]/10 text-[#7ce8bb]"
     : tone === "no"
-      ? "border-red-500/30 bg-red-500/10 text-red-300"
-      : "border-slate-700 bg-slate-950/50 text-slate-200";
+      ? "border-[#fa4669]/30 bg-[#fa4669]/10 text-[#f78ba0]"
+      : "border-[#3b3b43] bg-[#111114]/50 text-[#e6e6e9]";
   return (
     <button
       onClick={onClick}
       disabled={disabled}
-      className={`w-full rounded-lg border px-3 py-2 text-left font-semibold transition hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-45 ${toneClass}`}
+      className={`w-full rounded-lg border px-3 py-2 text-left font-semibold transition hover:border-[#55555e] disabled:cursor-not-allowed disabled:opacity-45 ${toneClass}`}
     >
       {children}
     </button>
@@ -1184,8 +1234,8 @@ function Badge({ className, children }: { className: string; children: React.Rea
 function Row({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
     <div className="flex items-center justify-between py-1">
-      <span className="text-slate-400">{label}</span>
-      <span className={strong ? "font-bold text-white" : "text-slate-200"}>{value}</span>
+      <span className="text-[#a1a1aa]">{label}</span>
+      <span className={strong ? "font-bold text-white" : "text-[#e6e6e9]"}>{value}</span>
     </div>
   );
 }
@@ -1196,7 +1246,7 @@ function TxLink({ label, signature }: { label: string; signature: string }) {
       href={`https://explorer.solana.com/tx/${signature}?cluster=devnet`}
       target="_blank"
       rel="noreferrer"
-      className="mt-2 flex items-center gap-1.5 text-xs text-blue-200 underline decoration-blue-300/40 underline-offset-4"
+      className="mt-2 flex items-center gap-1.5 text-xs text-[#7ce8bb] underline decoration-blue-300/40 underline-offset-4"
     >
       {label}: View on Solana Explorer
       <ExternalLink size={12} />

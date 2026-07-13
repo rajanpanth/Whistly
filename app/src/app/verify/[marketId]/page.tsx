@@ -18,22 +18,22 @@ export default async function VerifyPage({ params }: VerifyPageProps) {
   const isDemoProof = market.proofStatus === "demo";
 
   return (
-    <div className="space-y-6 pb-8 text-slate-100">
-      <header className="rounded-lg border border-slate-800 bg-[#07101b] p-5">
+    <div className="space-y-6 pb-8 text-[#f4f4f5]">
+      <header className="rounded-xl border border-[#29292f] bg-[#19191d] p-5">
         <div className="flex items-center gap-2">
-          <ShieldCheck className="text-blue-300" size={20} />
+          <ShieldCheck className="text-[#20d38a]" size={20} />
           <h1 className="font-heading text-2xl font-bold text-white">
             Market Verification
           </h1>
         </div>
-        <p className="mt-2 text-sm text-slate-400">
+        <p className="mt-2 text-sm text-[#a1a1aa]">
           Settlement proof for market:{" "}
-          <span className="text-slate-200">{market.question}</span>
+          <span className="text-[#e6e6e9]">{market.question}</span>
         </p>
       </header>
 
       {isDemoProof && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">
+        <div className="flex items-start gap-2 rounded-xl border border-[#e6ff3e]/20 bg-[#e6ff3e]/[0.05] p-3 text-sm text-[#e4e8c9]">
           <ShieldCheck className="mt-0.5 shrink-0" size={16} />
           <span>
             Demo proof — simulated TxLINE-compatible event data. This market
@@ -43,7 +43,7 @@ export default async function VerifyPage({ params }: VerifyPageProps) {
       )}
 
       {/* Market details */}
-      <section className="rounded-lg border border-slate-800 bg-[#08111f] p-5">
+      <section className="rounded-xl border border-[#29292f] bg-[#141418] p-5">
         <h2 className="text-lg font-semibold text-white">Market Details</h2>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <ProofRow label="Market Question" value={market.question} />
@@ -60,7 +60,7 @@ export default async function VerifyPage({ params }: VerifyPageProps) {
       </section>
 
       {/* Resolution proof */}
-      <section className="rounded-lg border border-slate-800 bg-[#08111f] p-5">
+      <section className="rounded-xl border border-[#29292f] bg-[#141418] p-5">
         <h2 className="text-lg font-semibold text-white">
           Why did this market resolve?
         </h2>
@@ -91,7 +91,7 @@ export default async function VerifyPage({ params }: VerifyPageProps) {
         </div>
 
         {/* Explanation */}
-        <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950/40 p-4 text-sm text-slate-300">
+        <div className="mt-4 rounded-xl border border-[#29292f] bg-white/[0.04] p-4 text-sm text-[#c9c9ce]">
           {market.family === "Live" || market.family === "Goals" ? (
             <p>
               Total goals increased during the window. If total goals at end
@@ -115,30 +115,30 @@ export default async function VerifyPage({ params }: VerifyPageProps) {
       </section>
 
       {/* Transaction links */}
-      <section className="rounded-lg border border-slate-800 bg-[#08111f] p-5">
+      <section className="rounded-xl border border-[#29292f] bg-[#141418] p-5">
         <h2 className="text-lg font-semibold text-white">
           On-chain Transactions
         </h2>
         <div className="mt-4 space-y-3">
-          <div className="flex items-center gap-2 text-sm text-slate-400">
-            <CheckCircle2 size={15} className="text-blue-300" />
+          <div className="flex items-center gap-2 text-sm text-[#a1a1aa]">
+            <CheckCircle2 size={15} className="text-[#20d38a]" />
             <span>
               Settlement tx:{" "}
               {isDemoProof ? (
-                <span className="text-amber-300">Demo — no real tx</span>
+                <span className="text-[#d8ec52]">Demo — no real tx</span>
               ) : (
-                <span className="text-blue-200">View on Solana Explorer</span>
+                <span className="text-[#7ce8bb]">View on Solana Explorer</span>
               )}
             </span>
           </div>
-          <div className="flex items-center gap-2 text-sm text-slate-400">
-            <CheckCircle2 size={15} className="text-blue-300" />
+          <div className="flex items-center gap-2 text-sm text-[#a1a1aa]">
+            <CheckCircle2 size={15} className="text-[#20d38a]" />
             <span>
               Claim tx:{" "}
               {isDemoProof ? (
-                <span className="text-amber-300">Demo — no real tx</span>
+                <span className="text-[#d8ec52]">Demo — no real tx</span>
               ) : (
-                <span className="text-blue-200">View on Solana Explorer</span>
+                <span className="text-[#7ce8bb]">View on Solana Explorer</span>
               )}
             </span>
           </div>
@@ -150,8 +150,8 @@ export default async function VerifyPage({ params }: VerifyPageProps) {
 
 function ProofRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-950/40 px-4 py-3">
-      <div className="text-xs text-slate-500">{label}</div>
+    <div className="rounded-xl border border-[#29292f] bg-white/[0.04] px-4 py-3">
+      <div className="text-xs text-[#6f6f78]">{label}</div>
       <div className="mt-1 text-sm font-semibold text-white">{value}</div>
     </div>
   );

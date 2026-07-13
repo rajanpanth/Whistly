@@ -1,19 +1,97 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { Activity, Database, ShieldCheck } from "lucide-react";
 
-export default function DataHealthWidget({ connected = false, compact = false }: { connected?: boolean; compact?: boolean }) {
-  const state = connected ? "Connected" : "Demo";
-  const values = [["Scores", state], ["Odds", state], ["Fixtures", state], ["Last update", "2s ago"], ["Network", "Devnet"], ["Delay", connected ? "Real-time" : "Demo"]];
+type ServiceState = "connected" | "not_configured" | "error" | "mock" | "not_implemented";
+
+type TxLineStatus = {
+  status: ServiceState;
+  connected: boolean;
+  configured: boolean;
+  mockModeEnabled: boolean;
+  missingEnvVars: string[];
+  settlementEnabled: boolean;
+  network: string;
+  lastCheckedAt: string;
+  services: { fixtures: ServiceState; scores: ServiceState; odds: ServiceState };
+  note: string;
+};
+
+const STATE_LABEL: Record<ServiceState, string> = {
+  connected: "Connected",
+  not_configured: "Not configured",
+  error: "Error",
+  mock: "Mock",
+  not_implemented: "—",
+};
+
+function badgeClasses(state: ServiceState | "loading"): string {
+  if (state === "connected") return "bg-[#20d38a]/10 text-[#7ce8bb]";
+  if (state === "mock") return "bg-[#e6ff3e]/10 text-[#d8ec52]";
+  if (state === "error") return "bg-[#fa4669]/10 text-[#f78ba0]";
+  return "bg-white/[0.06] text-[#a1a1aa]";
+}
+
+export default function DataHealthWidget({ compact = false }: { connected?: boolean; compact?: boolean }) {
+  const [status, setStatus] = useState<TxLineStatus | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => fetch("/api/txline/status")
+      .then(res => res.json())
+      .then(data => { if (!cancelled) { setStatus(data); setFailed(false); } })
+      .catch(() => { if (!cancelled) setFailed(true); });
+    load();
+    const timer = window.setInterval(load, 30_000);
+    return () => { cancelled = true; window.clearInterval(timer); };
+  }, []);
+
+  const headline: ServiceState | "loading" = failed ? "error" : status?.status ?? "loading";
+  const headlineLabel = failed
+    ? "Error"
+    : !status
+      ? "Checking…"
+      : status.connected
+        ? "TxLINE Connected"
+        : status.mockModeEnabled
+          ? "Mock Mode"
+          : status.configured
+            ? "TxLINE Error"
+            : "Not Configured";
+
+  const rows: Array<[string, string]> = status ? [
+    ["Fixtures", STATE_LABEL[status.services.fixtures]],
+    ["Scores", STATE_LABEL[status.services.scores]],
+    ["Odds", STATE_LABEL[status.services.odds]],
+    ["Network", status.network],
+    ["Settlement", status.settlementEnabled ? "Enabled" : "Disabled"],
+    ["Last check", new Date(status.lastCheckedAt).toLocaleTimeString()],
+  ] : [];
+
   return (
-    <section className="rounded-2xl border border-cyan-400/20 bg-[#081426] p-4 shadow-xl shadow-cyan-950/10">
+    <section className="rounded-xl border border-[#29292f] bg-[#141418] p-4">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 font-heading text-sm font-bold text-white"><Activity size={16} className="text-cyan-300" />TxLINE Data Health</div>
-        <span className={"rounded-full px-2 py-1 text-[10px] font-bold uppercase " + (connected ? "bg-emerald-400/10 text-emerald-300" : "bg-amber-400/10 text-amber-300")}><span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-current" />{state}</span>
+        <div className="flex items-center gap-2 font-heading text-sm font-bold text-[#f4f4f5]"><Activity size={16} className="text-[#20d38a]" />TxLINE Data Health</div>
+        <span className={"rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider " + badgeClasses(headline)}><span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-current" />{headlineLabel}</span>
       </div>
       <div className={"mt-4 grid gap-2 text-xs " + (compact ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3")}>
-        {values.map(([label, value]) => <div key={label} className="rounded-xl border border-white/[0.07] bg-black/15 p-2.5"><div className="text-slate-500">{label}</div><div className="mt-1 font-semibold text-slate-100">{value}</div></div>)}
+        {rows.map(([label, value]) => <div key={label} className="rounded-lg border border-[#232328] bg-white/[0.03] p-2.5"><div className="text-[#6f6f78]">{label}</div><div className="mt-1 font-semibold text-[#e6e6e9]">{value}</div></div>)}
+        {!status && !failed && <div className="col-span-2 rounded-lg border border-[#232328] bg-white/[0.03] p-2.5 text-[#6f6f78]">Checking TxLINE status…</div>}
+        {failed && <div className="col-span-2 rounded-lg border border-[#232328] bg-white/[0.03] p-2.5 text-[#f78ba0]">Status endpoint unreachable.</div>}
       </div>
-      {!connected && !compact && <div className="mt-3 flex items-start gap-2 text-xs leading-5 text-slate-400"><Database size={13} className="mt-0.5 shrink-0 text-cyan-300" />TxLINE real credentials not configured. Demo mode is using simulated TxLINE-compatible data.</div>}
-      <div className="mt-3 flex items-center gap-1.5 text-[11px] text-cyan-200"><ShieldCheck size={12} />Credentials and tokens are never displayed.</div>
+      {status && !status.connected && (
+        <div className="mt-3 flex items-start gap-2 text-xs leading-5 text-[#a1a1aa]">
+          <Database size={13} className="mt-0.5 shrink-0 text-[#d8ec52]" />
+          {status.mockModeEnabled
+            ? "Mock Mode Enabled — not real TxLINE data. Settlement uses labeled mock scores."
+            : status.configured
+              ? "TxLINE request failed. Settlement disabled until TxLINE responds."
+              : "Settlement disabled until TxLINE is configured (TXLINE_BASE_URL, TXLINE_GUEST_JWT, TXLINE_API_TOKEN)."}
+        </div>
+      )}
+      <div className="mt-3 flex items-center gap-1.5 text-[11px] text-[#8b8b94]"><ShieldCheck size={12} />Credentials and tokens are never displayed.</div>
     </section>
   );
 }

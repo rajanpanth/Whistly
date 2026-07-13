@@ -37,6 +37,11 @@ failed*.txt
 job*.txt
 job*.log
 log.txt
+build-output.txt
+*.bak
+*.old
+*.orig
+*.tmp
 
 # Misc
 *.tsbuildinfo

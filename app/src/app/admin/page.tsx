@@ -6,6 +6,7 @@ import { isAdminWallet } from "@/lib/constants";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import toast from "react-hot-toast";
 import AdminEditModal from "./AdminEditModal";
+import TxLineSettlementPanel from "./TxLineSettlementPanel";
 import { PublicKey } from "@solana/web3.js";
 import { buildInitializePlatformIx, sendTransaction, confirmTransactionBg, getPlatformConfigPDA } from "@/lib/program";
 import { connection } from "@/lib/program.base";
@@ -247,6 +248,9 @@ export default function AdminPage() {
           </button>
         </div>
       )}
+
+      {/* TxLINE settlement panel */}
+      <TxLineSettlementPanel />
 
       {/* Stats cards (original) */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">

@@ -7,6 +7,8 @@ export interface TxLineFixture {
   clockSeconds: number;
   homeScore: number;
   awayScore: number;
+  /** Kick-off time in epoch ms (real TxLINE fixtures). */
+  startTimeMs?: number;
   updatedAt: string;
 }
 

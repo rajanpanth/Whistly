@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { BadgeCheck, CircleDot, Clock3 } from "lucide-react";
+import { ArrowUpRight, BadgeCheck, ChevronRight, CircleDot, Lock } from "lucide-react";
 import type { MarketplaceMarket, MarketOutcome } from "@/lib/marketplaceData";
+import MarketProbabilityChart from "./MarketProbabilityChart";
 import MarketShareButton from "./MarketShareButton";
 
 function CountdownBadge({ value }: { value: string }) {
-  return <span className="market-countdown"><Clock3 size={12} />{value}</span>;
+  return <span className="market-countdown">{value.split(" : ").map((segment, index) => <em key={index}>{segment}</em>)}</span>;
 }
 
 function LiveBadge() { return <span className="market-live-badge"><span />Live</span>; }
@@ -17,35 +18,74 @@ function OutcomeRows({ outcomes, marketTitle }: { outcomes: MarketOutcome[]; mar
   const [selected, setSelected] = useState<string | null>(null);
   return <div className="market-outcomes" aria-label={`Outcomes for ${marketTitle}`}>
     {outcomes.map((outcome) => <button type="button" key={`${outcome.label}-${outcome.probability}`} className={`market-outcome ${selected === outcome.label ? "is-selected" : ""}`} onClick={() => setSelected(current => current === outcome.label ? null : outcome.label)} aria-pressed={selected === outcome.label}>
-      <span className="market-outcome-team"><span className="market-team-avatar" aria-hidden="true">{outcome.symbol?.slice(0, 2) ?? outcome.label.slice(0, 2)}</span><span>{outcome.label}</span></span>
-      <span className="market-outcome-price"><small>1 SOL →</small> {outcome.price}</span>
+      <span className="market-outcome-team"><span className={`market-team-avatar ${outcome.symbol === "YES" ? "is-yes" : ""} ${outcome.symbol === "NO" ? "is-no" : ""}`} aria-hidden="true">{outcome.symbol?.slice(0, 3) ?? outcome.label.slice(0, 2)}</span><span>{outcome.label}</span></span>
+      <span className="market-outcome-price"><small>$100</small><ChevronRight size={11} aria-hidden="true" /><b>{outcome.price}</b></span>
       <span className="market-probability">{outcome.probability}%</span>
     </button>)}
   </div>;
 }
 
+function MarketMetaFooter({ market }: { market: MarketplaceMarket }) {
+  if (!market.pool && !market.lock) return null;
+  return <div className="market-meta-row">{market.pool && <span>{market.pool}</span>}{market.lock && <span><Lock size={10} aria-hidden="true" />{market.lock}</span>}<span className="market-devnet-tag">Devnet · Mock</span></div>;
+}
+
 export function MarketCard({ market }: { market: MarketplaceMarket }) {
   return <article className="market-card">
-    <div className="market-card-top">{market.countdown && <CountdownBadge value={market.countdown} />}{market.combo && <ComboBadge />}</div>
+    <div className="market-card-top">{market.status === "live" ? <span className="market-live-meta-inline"><LiveBadge /><span>{market.clock}</span><strong>{market.score}</strong></span> : market.countdown && <CountdownBadge value={market.countdown} />}{market.combo && <ComboBadge />}</div>
     <p className="market-competition"><CircleDot size={13} />{market.competition}</p>
     <h3><Link href={market.href}>{market.title}</Link></h3>
     <OutcomeRows outcomes={market.outcomes} marketTitle={market.title} />
+    <MarketMetaFooter market={market} />
     <footer className="market-card-footer"><div>{market.tags.map(tag => <span key={tag}>{tag}</span>)}</div><MarketShareButton marketId={market.id} title={market.title} /></footer>
   </article>;
 }
 
 export function FeaturedMarketCard({ market }: { market: MarketplaceMarket }) {
+  const isLive = market.status === "live";
   return <article className="market-featured">
     <div className="market-featured-art" aria-hidden="true"><span /><span /><span /></div>
-    <div className="market-card-top">{market.countdown && <CountdownBadge value={market.countdown} />}{market.combo && <ComboBadge />}</div>
-    <div className="market-featured-layout"><div className="market-featured-content"><p className="market-competition"><CircleDot size={13} />{market.competition}</p><h1><Link href={market.href}>{market.title}</Link></h1><OutcomeRows outcomes={market.outcomes} marketTitle={market.title} /></div><div className="market-chart" aria-label="Market probability chart"><div className="chart-axis"><span>80%</span><span>60%</span><span>40%</span><span>20%</span><span>0%</span></div><svg viewBox="0 0 620 260" preserveAspectRatio="none" role="img"><path className="chart-grid" d="M0 34H620M0 84H620M0 134H620M0 184H620M0 234H620" /><path className="chart-red" d="M0 86 C90 86 130 86 190 86 S245 100 275 99 S340 103 380 88 S465 84 510 88 S550 75 620 82" /><path className="chart-blue" d="M0 148 C120 148 170 149 250 149 S310 132 350 151 S420 163 465 163 S530 160 620 160" /><circle className="chart-dot-red" cx="572" cy="83" r="5" /><circle className="chart-dot-blue" cx="572" cy="160" r="5" /></svg><div className="chart-label red">{market.outcomes[0]?.label} {market.outcomes[0]?.probability}%</div><div className="chart-label blue">{market.outcomes[1]?.label} {market.outcomes[1]?.probability}%</div><div className="chart-times"><span>03:45 AM</span><span>07:45 AM</span><span>11:45 AM</span><span>03:45 PM</span></div></div></div>
+    <div className="market-card-top">
+      {isLive ? <span className="market-live-meta-inline"><LiveBadge /><span>{market.clock}</span><strong>{market.score}</strong><em className="market-hero-flag">World Cup · Devnet demo</em></span> : market.countdown && <CountdownBadge value={market.countdown} />}
+      {market.combo && <ComboBadge />}
+    </div>
+    <div className="market-featured-layout">
+      <div className="market-featured-content">
+        <p className="market-competition"><CircleDot size={13} />{market.competition}</p>
+        <h1><Link href={market.href}>{market.title}</Link></h1>
+        {market.question && <p className="market-hero-question">{market.question}{market.window && <span> · Window {market.window}</span>}</p>}
+        <OutcomeRows outcomes={market.outcomes} marketTitle={market.title} />
+        <div className="market-hero-notes">
+          <span>TxLINE-compatible score data</span>
+          <span>Resolves from score data, not majority vote</span>
+        </div>
+        <Link href="/live" className="market-hero-cta">Trade on /live <ArrowUpRight size={14} /></Link>
+      </div>
+      <MarketProbabilityChart market={market} />
+    </div>
     <footer className="market-card-footer"><div>{market.tags.map(tag => <span key={tag}>{tag}</span>)}</div><MarketShareButton marketId={market.id} title={market.title} /></footer>
   </article>;
 }
 
 export function LiveMarketCard({ market }: { market: MarketplaceMarket }) {
-  return <article className="market-live-card"><div className="market-live-meta"><LiveBadge /><span>{market.clock}</span><strong>{market.score}</strong>{market.combo && <ComboBadge />}</div><p className="market-competition"><CircleDot size={13} />{market.competition}</p><h3><Link href={market.href}>{market.title}</Link></h3><OutcomeRows outcomes={market.outcomes} marketTitle={market.title} /></article>;
+  return <article className="market-live-card">
+    <div className="market-live-meta"><LiveBadge /><span>{market.clock}</span><strong>{market.score}</strong>{market.combo && <ComboBadge />}</div>
+    <p className="market-competition"><CircleDot size={13} />{market.competition}</p>
+    <h3><Link href={market.href}>{market.question ?? market.title}</Link></h3>
+    <p className="market-live-fixture">{market.title}</p>
+    <OutcomeRows outcomes={market.outcomes} marketTitle={market.title} />
+    <MarketMetaFooter market={market} />
+  </article>;
 }
 
-
-
+export function SoccerSpotlightCard({ market }: { market: MarketplaceMarket }) {
+  return <article className="market-visual-card">
+    <div className="market-pitch" aria-hidden="true"><span /><i /><b /></div>
+    <div>
+      <p><span className="market-live-meta-inline"><LiveBadge /><span>{market.clock}</span></span><strong>{market.score}</strong></p>
+      <small><CircleDot size={12} aria-hidden="true" /> {market.competition}</small>
+      <h3><Link href={market.href}>{market.title}</Link></h3>
+      <small>{market.question}</small>
+    </div>
+  </article>;
+}
