@@ -159,6 +159,21 @@ describe("POST /api/rpc/create-poll", () => {
         p_creator_investment_cents: 0,
     };
 
+    // Market creation is house-only: createAdminRpcHandler checks admin_wallets
+    // before validation, so the whole suite runs as admin except the 403 test.
+    beforeEach(() => {
+        mockSingle.mockResolvedValue({ data: { wallet: MOCK_WALLET } });
+    });
+
+    it("rejects non-admin wallets with 403 (markets are house-created)", async () => {
+        mockSingle.mockResolvedValue({ data: null });
+        const res = await createPollHandler(makeRequest(validBody));
+        expect(res.status).toBe(403);
+        const body = await parseJson(res);
+        expect(body.error).toBe("not_admin");
+        expect(mockRpc).not.toHaveBeenCalled();
+    });
+
     it("creates poll with valid input", async () => {
         const res = await createPollHandler(makeRequest(validBody));
         expect(res.status).toBe(200);
@@ -350,7 +365,8 @@ describe("Critical path: signup → create → vote → settle → claim", () =>
             expect.objectContaining({ p_wallet: cpWallet })
         );
 
-        // Step 2: Create poll
+        // Step 2: Create poll (house-only — wallet must pass the admin check)
+        mockSingle.mockResolvedValue({ data: { wallet: cpWallet } });
         mockRpc.mockResolvedValueOnce({ data: { success: true, poll_id: "new-poll" }, error: null });
         const createRes = await createPollHandler(
             makeRequest({

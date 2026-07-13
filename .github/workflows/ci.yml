@@ -21,11 +21,16 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: backpackapp/build:v0.30.1
+    env:
+      # Actions overrides HOME to /github/home inside containers; rustup's
+      # toolchain config lives in /root, so restore it or rustc has no default.
+      HOME: /root
     steps:
       - uses: actions/checkout@v4
 
       - name: Verify Anchor toolchain
         run: |
+          rustup default stable 2>/dev/null || rustup default "$(rustup toolchain list | head -1 | cut -d' ' -f1)" || true
           rustc --version
           solana --version
           anchor --version
