@@ -49,8 +49,8 @@ export default function KickTickMarketCard({ market }: Props) {
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-2">
-          <div className="flex h-10 items-center justify-between rounded-[0.65rem] border border-[#20d38a]/25 bg-[#20d38a]/[0.08] px-4 text-sm font-bold text-[#7ce8bb]"><span>YES</span><span className="font-mono">{market.yesProbability}¢</span></div>
-          <div className="flex h-10 items-center justify-between rounded-[0.65rem] border border-[#fa4669]/25 bg-[#fa4669]/[0.08] px-4 text-sm font-bold text-[#f78ba0]"><span>NO</span><span className="font-mono">{market.noProbability}¢</span></div>
+          <div className="flex h-10 items-center justify-between rounded-[0.65rem] border border-[#20d38a]/25 bg-[#20d38a]/[0.08] px-4 text-sm font-bold text-[#7ce8bb] transition group-hover:border-[#20d38a] group-hover:bg-[#20d38a] group-hover:text-[#0a0a0c]"><span>Buy Yes</span><span className="font-mono">{market.yesProbability}¢</span></div>
+          <div className="flex h-10 items-center justify-between rounded-[0.65rem] border border-[#fa4669]/25 bg-[#fa4669]/[0.08] px-4 text-sm font-bold text-[#f78ba0] transition group-hover:border-[#fa4669]/60"><span>Buy No</span><span className="font-mono">{market.noProbability}¢</span></div>
         </div>
 
         <div className="mt-auto flex items-center gap-2 pt-4 text-xs font-medium text-[#85858e]">

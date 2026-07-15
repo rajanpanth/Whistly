@@ -180,6 +180,13 @@ export default function PollDetailClient() {
     })();
 
     // ── Polymarket-style derived figures ──
+    const LAMPORTS_PER_SOL = 1_000_000_000;
+    const unitLamports = poll.unitPriceLamports || 1;
+    const amountSol = cost / LAMPORTS_PER_SOL;
+    const setAmountFromSol = (sol: number) => {
+        const lamports = Math.max(0, sol) * LAMPORTS_PER_SOL;
+        setNumCoins(Math.max(1, Math.floor(lamports / unitLamports)));
+    };
     const pctOf = (i: number) => (totalVotes > 0 ? (poll.voteCounts[i] / totalVotes) * 100 : 100 / Math.max(1, poll.options.length));
     const leadingIndex = poll.voteCounts.reduce((best, count, i) => (count > (poll.voteCounts[best] || 0) ? i : best), 0);
     const headlineIndex = isSettled && poll.winningOption !== WINNING_OPTION_UNSET ? poll.winningOption : leadingIndex;
@@ -363,10 +370,14 @@ export default function PollDetailClient() {
                 <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
                     {!isEnded && !isSettled && (
                         <section className="rounded-2xl border border-white/[0.07] bg-gradient-to-b from-[#15151a] to-[#101014] p-4 shadow-2xl shadow-black/30">
-                            <h2 className="text-sm font-bold text-white">Buy position</h2>
+                            {/* Buy / Sell tabs (pool market — no secondary selling) */}
+                            <div className="flex border-b border-white/[0.06] text-sm font-extrabold">
+                                <span className="border-b-2 border-[#20d38a] px-1 pb-2 text-white">Buy</span>
+                                <span className="ml-5 cursor-not-allowed px-1 pb-2 text-[#4a4a52]" title="Pool market — positions settle at resolution, no secondary selling">Sell</span>
+                            </div>
 
                             {/* Outcome selector */}
-                            <div className={`mt-3 grid gap-2 ${poll.options.length === 2 ? "grid-cols-2" : "grid-cols-1"}`}>
+                            <div className={`mt-4 grid gap-2 ${poll.options.length === 2 ? "grid-cols-2" : "grid-cols-1"}`}>
                                 {poll.options.map((opt, i) => {
                                     const isSelected = selectedOption === i;
                                     return (
@@ -385,33 +396,42 @@ export default function PollDetailClient() {
                                 })}
                             </div>
 
-                            {/* Amount */}
-                            <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-[#6f6f78]">
-                                Coins
-                                <input
-                                    type="number"
-                                    value={numCoins}
-                                    onChange={(e) => setNumCoins(Math.max(1, parseInt(e.target.value) || 1))}
-                                    min={1}
-                                    className="mt-1.5 w-full rounded-xl border border-white/[0.08] bg-[#0d0d11] px-3 py-3 text-right font-mono text-lg font-bold text-white outline-none transition focus:border-[#20d38a]/50"
-                                />
-                            </label>
+                            {/* Amount (devnet SOL) */}
+                            <div className="mt-4 flex items-baseline justify-between">
+                                <span className="text-xs font-bold uppercase tracking-wider text-[#6f6f78]">Amount</span>
+                                <span className="text-[10px] text-[#5d5d65]">devnet SOL</span>
+                            </div>
+                            <input
+                                type="number"
+                                value={Number(amountSol.toFixed(4))}
+                                onChange={(e) => setAmountFromSol(parseFloat(e.target.value) || 0)}
+                                min={unitLamports / LAMPORTS_PER_SOL}
+                                step={unitLamports / LAMPORTS_PER_SOL}
+                                className="mt-1.5 w-full rounded-xl border border-white/[0.08] bg-[#0d0d11] px-3 py-3 text-right font-mono text-2xl font-extrabold text-white outline-none transition focus:border-[#20d38a]/50"
+                            />
                             <div className="mt-2 flex gap-1.5">
-                                {[1, 10, 25].map(step => (
-                                    <button key={step} onClick={() => setNumCoins(numCoins + step)} className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] py-1.5 text-xs font-bold text-[#c9c9ce] transition hover:border-white/20 hover:text-white">
-                                        +{step}
+                                {([[0.01, "+0.01"], [0.05, "+0.05"], [0.1, "+0.1"]] as const).map(([sol, label]) => (
+                                    <button key={label} onClick={() => setAmountFromSol(amountSol + sol)} className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] py-1.5 text-xs font-bold text-[#c9c9ce] transition hover:border-white/20 hover:text-white">
+                                        {label}
                                     </button>
                                 ))}
+                                {userAccount && (
+                                    <button onClick={() => setAmountFromSol(userAccount.balance / LAMPORTS_PER_SOL)} className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] py-1.5 text-xs font-bold text-[#c9c9ce] transition hover:border-white/20 hover:text-white">
+                                        Max
+                                    </button>
+                                )}
                             </div>
 
-                            {/* Summary */}
+                            {/* Order summary — Polymarket format */}
                             <div className="mt-4 space-y-1.5 rounded-xl border border-white/[0.05] bg-[#0d0d11] p-3 text-sm">
-                                <div className="flex justify-between"><span className="text-[#8b8b94]">Cost</span><span className="font-mono font-bold text-white">{formatDollars(cost)}</span></div>
-                                <div className="flex justify-between">
-                                    <span className="text-[#8b8b94]">To win 💸</span>
-                                    <span className="font-mono font-bold text-[#7ce8bb]">{selectedOption !== null ? formatDollars(toWin) : "—"}</span>
+                                <div className="flex justify-between text-xs"><span className="text-[#6f6f78]">Shares</span><span className="font-mono font-bold text-white">{numCoins}</span></div>
+                                <div className="flex justify-between text-xs"><span className="text-[#6f6f78]">Avg price</span><span className="font-mono text-[#8b8b94]">{selectedOption !== null ? `${Math.round(pctOf(selectedOption))}¢` : "—"}</span></div>
+                                <div className="flex justify-between text-xs"><span className="text-[#6f6f78]">Cost</span><span className="font-mono text-[#8b8b94]">{formatDollars(cost)}</span></div>
+                                <div className="flex justify-between border-t border-white/[0.05] pt-1.5">
+                                    <span className="font-bold text-[#8b8b94]">To win 💸</span>
+                                    <span className="font-mono text-base font-extrabold text-[#7ce8bb]">{selectedOption !== null ? formatDollars(toWin) : "—"}</span>
                                 </div>
-                                {userAccount && <div className="flex justify-between border-t border-white/[0.05] pt-1.5 text-xs"><span className="text-[#6f6f78]">Balance</span><span className="font-mono text-[#8b8b94]">{formatDollars(userAccount.balance)}</span></div>}
+                                {userAccount && <div className="flex justify-between text-xs"><span className="text-[#6f6f78]">Balance</span><span className="font-mono text-[#8b8b94]">{formatDollars(userAccount.balance)}</span></div>}
                             </div>
 
                             {/* Action */}
