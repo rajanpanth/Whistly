@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useApp, formatDollars, DemoPoll, WINNING_OPTION_UNSET } from "@/components/Providers";
-import PollImage from "@/components/PollImage";
 import Image from "next/image";
 import WalletConnectModal from "@/components/WalletConnectModal";
 import EditPollModal from "@/components/EditPollModal";
@@ -180,8 +179,38 @@ export default function PollDetailClient() {
         );
     })();
 
+    // ── Polymarket-style derived figures ──
+    const pctOf = (i: number) => (totalVotes > 0 ? (poll.voteCounts[i] / totalVotes) * 100 : 100 / Math.max(1, poll.options.length));
+    const leadingIndex = poll.voteCounts.reduce((best, count, i) => (count > (poll.voteCounts[best] || 0) ? i : best), 0);
+    const headlineIndex = isSettled && poll.winningOption !== WINNING_OPTION_UNSET ? poll.winningOption : leadingIndex;
+    const headlinePct = Math.round(pctOf(headlineIndex));
+    // Pool-share payout estimate if the selected option wins (same math as claim)
+    const toWin = (() => {
+        if (selectedOption === null) return 0;
+        const stakedVotes = poll.voteCounts[selectedOption] + numCoins;
+        if (stakedVotes <= 0) return cost;
+        return Math.floor((numCoins / stakedVotes) * (poll.totalPoolLamports + cost));
+    })();
+    const endDate = poll.endTime ? new Date(poll.endTime * 1000).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "";
+    const optionColor = (i: number) => (i === 0 ? "#20d38a" : i === 1 ? "#fa4669" : "#5475ff");
+
+    const optionAvatar = (i: number) => {
+        const optImage = poll.optionImages?.[i] ? sanitizeImageUrl(poll.optionImages[i]) : "";
+        if (optImage) {
+            return optImage.startsWith("data:")
+                // eslint-disable-next-line @next/next/no-img-element
+                ? <img src={optImage} alt="" className="h-9 w-9 rounded-full border border-white/10 object-cover" />
+                : <Image src={optImage} alt="" width={36} height={36} unoptimized className="h-9 w-9 rounded-full border border-white/10 object-cover" />;
+        }
+        return (
+            <div className="grid h-9 w-9 place-items-center rounded-full border border-white/10 text-xs font-extrabold text-white" style={{ background: optionColor(i) + "33", color: optionColor(i) }}>
+                {poll.options[i]?.charAt(0).toUpperCase()}
+            </div>
+        );
+    };
+
     return (
-        <div className="max-w-3xl mx-auto">
+        <div className="mx-auto max-w-6xl pb-10">
             <WalletConnectModal isOpen={showWalletModal} onClose={() => setShowWalletModal(false)} />
             {poll && (
                 <>
@@ -196,306 +225,291 @@ export default function PollDetailClient() {
             )}
 
             {/* Back */}
-            <button onClick={() => router.push("/")} className="flex items-center gap-1.5 text-gray-400 hover:text-white mb-6 text-sm font-medium transition-colors group">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="group-hover:-translate-x-0.5 transition-transform"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+            <button onClick={() => router.push("/")} className="group mb-5 flex items-center gap-1.5 text-sm font-medium text-gray-400 transition-colors hover:text-white">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="transition-transform group-hover:-translate-x-0.5"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
                 {t("backToPolls")}
             </button>
 
-            {/* Header */}
-            <div className="bg-surface-100 border border-border rounded-2xl overflow-hidden mb-6">
-                {poll.imageUrl && (
-                    <PollImage
-                        src={poll.imageUrl}
-                        alt={poll.title}
-                        className="rounded-none"
-                    />
-                )}
-
-                <div className="p-5 sm:p-8">
-                    <div className="flex items-start justify-between mb-4">
-                        <span className="px-3 py-1 bg-brand-600/20 text-brand-400 rounded-lg text-xs font-medium">
-                            {poll.category}
-                        </span>
-                        <div className="flex items-center gap-2">
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+                {/* ══ LEFT — market ══ */}
+                <div className="min-w-0">
+                    {/* Header */}
+                    <div className="flex items-start gap-4">
+                        {poll.imageUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={sanitizeImageUrl(poll.imageUrl)} alt="" className="h-14 w-14 shrink-0 rounded-xl border border-white/[0.08] object-cover sm:h-16 sm:w-16" />
+                        ) : (
+                            <div className="grid h-14 w-14 shrink-0 place-items-center rounded-xl border border-white/[0.08] bg-[#15151a] text-xl sm:h-16 sm:w-16">⚽</div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#8b8b94]">
+                                <span className="rounded-md bg-white/[0.06] px-2 py-0.5 font-bold text-[#c9c9ce]">{poll.category}</span>
+                                <span className="font-mono">{formatDollars(poll.totalPoolLamports)} Vol.</span>
+                                {endDate && <span className="flex items-center gap-1"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>{endDate}</span>}
+                                <span className={`rounded-md px-2 py-0.5 font-bold ${isSettled ? "bg-[#20d38a]/15 text-[#7ce8bb]" : isEnded ? "bg-[#fa4669]/15 text-[#f78ba0]" : "bg-white/[0.06] text-[#c9c9ce]"}`}>
+                                    {isSettled ? t("settled") : isEnded ? "Awaiting settlement" : timeLeft}
+                                </span>
+                            </div>
+                            <h1 className="mt-1.5 font-heading text-xl font-bold leading-tight tracking-tight text-white sm:text-2xl">{poll.title}</h1>
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-1">
                             <ShareButton pollId={poll.id} pollTitle={poll.title} />
-                            <span
-                                className={`px-3 py-1 rounded-lg text-xs font-semibold ${isSettled
-                                    ? "bg-green-600/20 text-green-400"
-                                    : isEnded
-                                        ? "bg-red-600/20 text-red-400"
-                                        : "bg-brand-500/20 text-brand-400"
+                            <div className="text-right">
+                                <div className="font-mono text-2xl font-extrabold sm:text-3xl" style={{ color: optionColor(headlineIndex) }}>{headlinePct}%</div>
+                                <div className="text-[10px] font-bold uppercase tracking-wider text-[#6f6f78]">{isSettled ? "settled" : "chance"} · {poll.options[headlineIndex]}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Chart */}
+                    <div className="mt-5">
+                        <VoteChart poll={poll} />
+                    </div>
+
+                    {/* Outcomes — Polymarket rows */}
+                    <section className="mt-5 overflow-hidden rounded-2xl border border-white/[0.07] bg-gradient-to-b from-[#15151a] to-[#101014]">
+                        <div className="flex items-center justify-between border-b border-white/[0.05] px-4 py-3 text-[11px] font-bold uppercase tracking-[0.12em] text-[#6f6f78]">
+                            <span>Outcome</span>
+                            <span>% chance · trade</span>
+                        </div>
+                        {poll.options.map((opt, i) => {
+                            const pct = pctOf(i);
+                            const isWinner = isSettled && poll.winningOption === i;
+                            const isSelected = selectedOption === i;
+                            const userVotes = vote ? vote.votesPerOption[i] || 0 : 0;
+                            return (
+                                <div key={i} className={`relative border-b border-white/[0.04] px-4 py-3.5 transition-colors last:border-b-0 ${isSelected ? "bg-white/[0.03]" : ""}`}>
+                                    <div className="absolute inset-y-0 left-0 opacity-[0.07]" style={{ width: `${Math.max(pct, 1)}%`, background: optionColor(i) }} aria-hidden="true" />
+                                    <div className="relative flex items-center gap-3">
+                                        {optionAvatar(i)}
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex items-center gap-2 truncate text-sm font-bold text-white">
+                                                {isWinner && <span className="text-[#20d38a]">✓</span>}
+                                                {opt}
+                                            </div>
+                                            <div className="text-xs text-[#8b8b94]">
+                                                {poll.voteCounts[i]} votes
+                                                {userVotes > 0 && <span className="ml-2 text-[#7ce8bb]">· you hold {userVotes} ({formatDollars(userVotes * poll.unitPriceLamports)})</span>}
+                                            </div>
+                                        </div>
+                                        <div className="w-14 text-right font-mono text-lg font-extrabold text-white">{Math.round(pct)}%</div>
+                                        {!isEnded && !isSettled ? (
+                                            <button
+                                                onClick={() => handleOptionClick(i)}
+                                                disabled={walletConnected && !canVote}
+                                                className="rounded-lg px-3.5 py-2 text-xs font-extrabold transition disabled:cursor-not-allowed disabled:opacity-40"
+                                                style={isSelected
+                                                    ? { background: optionColor(i), color: "#0a0a0c" }
+                                                    : { background: optionColor(i) + "1f", color: optionColor(i), border: `1px solid ${optionColor(i)}40` }}
+                                            >
+                                                Buy {Math.round(pct)}¢
+                                            </button>
+                                        ) : (
+                                            <span className={`rounded-lg px-3 py-1.5 text-xs font-extrabold ${isWinner ? "bg-[#20d38a]/15 text-[#7ce8bb]" : "bg-white/[0.04] text-[#6f6f78]"}`}>
+                                                {isSettled ? (isWinner ? "Won" : "Lost") : "Locked"}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </section>
+
+                    {/* About */}
+                    <section className="mt-5 rounded-2xl border border-white/[0.07] bg-gradient-to-b from-[#15151a] to-[#101014] p-5">
+                        <h2 className="text-sm font-bold uppercase tracking-[0.12em] text-[#8b8b94]">About this market</h2>
+                        {poll.description && <p className="mt-3 text-sm leading-relaxed text-[#c9c9ce]">{poll.description}</p>}
+                        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                            {[
+                                [formatDollars(poll.totalPoolLamports), "Pool"],
+                                [String(totalVotes), t("totalVotes")],
+                                [String(poll.totalVoters), "Voters"],
+                                [formatDollars(poll.unitPriceLamports), "Price/Coin"],
+                            ].map(([value, label]) => (
+                                <div key={label} className="rounded-xl border border-white/[0.05] bg-[#0d0d11] px-3 py-2.5 text-center">
+                                    <div className="font-mono text-sm font-bold text-white">{value}</div>
+                                    <div className="mt-0.5 text-[10px] uppercase tracking-wider text-[#6f6f78]">{label}</div>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#6f6f78]">
+                            <span>Platform fee: {formatDollars(poll.platformFeeLamports)}</span>
+                            <span>Creator reward: {formatDollars(poll.creatorRewardLamports)}</span>
+                            <span>Seed investment: {formatDollars(poll.creatorInvestmentLamports)}</span>
+                        </div>
+                        {isSettled && resolutionProof && (() => {
+                            // Sanitize URL: only allow http/https to prevent javascript: XSS
+                            const isSafeUrl = /^https?:\/\//i.test(resolutionProof);
+                            if (!isSafeUrl) return null;
+                            return (
+                                <div className="mt-4 flex items-center gap-2 rounded-lg border border-[#20d38a]/20 bg-[#20d38a]/[0.05] p-2.5">
+                                    <span className="text-sm text-[#7ce8bb]">🔗</span>
+                                    <span className="text-xs text-[#8b8b94]">Resolution source:</span>
+                                    <a href={resolutionProof} target="_blank" rel="noopener noreferrer" className="truncate text-xs text-[#7ce8bb] underline underline-offset-2 hover:text-white">
+                                        {resolutionProof}
+                                    </a>
+                                </div>
+                            );
+                        })()}
+                    </section>
+
+                    {/* Comments */}
+                    <div className="mt-5">
+                        <PollComments pollId={pollId} />
+                    </div>
+                </div>
+
+                {/* ══ RIGHT — trade panel ══ */}
+                <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
+                    {!isEnded && !isSettled && (
+                        <section className="rounded-2xl border border-white/[0.07] bg-gradient-to-b from-[#15151a] to-[#101014] p-4 shadow-2xl shadow-black/30">
+                            <h2 className="text-sm font-bold text-white">Buy position</h2>
+
+                            {/* Outcome selector */}
+                            <div className={`mt-3 grid gap-2 ${poll.options.length === 2 ? "grid-cols-2" : "grid-cols-1"}`}>
+                                {poll.options.map((opt, i) => {
+                                    const isSelected = selectedOption === i;
+                                    return (
+                                        <button
+                                            key={i}
+                                            onClick={() => handleOptionClick(i)}
+                                            disabled={walletConnected && !canVote}
+                                            className="truncate rounded-xl px-3 py-3 text-sm font-extrabold transition disabled:cursor-not-allowed disabled:opacity-40"
+                                            style={isSelected
+                                                ? { background: optionColor(i), color: "#0a0a0c" }
+                                                : { background: "#0d0d11", color: "#c9c9ce", border: "1px solid rgba(255,255,255,0.08)" }}
+                                        >
+                                            {opt} {Math.round(pctOf(i))}¢
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            {/* Amount */}
+                            <label className="mt-4 block text-xs font-bold uppercase tracking-wider text-[#6f6f78]">
+                                Coins
+                                <input
+                                    type="number"
+                                    value={numCoins}
+                                    onChange={(e) => setNumCoins(Math.max(1, parseInt(e.target.value) || 1))}
+                                    min={1}
+                                    className="mt-1.5 w-full rounded-xl border border-white/[0.08] bg-[#0d0d11] px-3 py-3 text-right font-mono text-lg font-bold text-white outline-none transition focus:border-[#20d38a]/50"
+                                />
+                            </label>
+                            <div className="mt-2 flex gap-1.5">
+                                {[1, 10, 25].map(step => (
+                                    <button key={step} onClick={() => setNumCoins(numCoins + step)} className="flex-1 rounded-lg border border-white/[0.07] bg-white/[0.03] py-1.5 text-xs font-bold text-[#c9c9ce] transition hover:border-white/20 hover:text-white">
+                                        +{step}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Summary */}
+                            <div className="mt-4 space-y-1.5 rounded-xl border border-white/[0.05] bg-[#0d0d11] p-3 text-sm">
+                                <div className="flex justify-between"><span className="text-[#8b8b94]">Cost</span><span className="font-mono font-bold text-white">{formatDollars(cost)}</span></div>
+                                <div className="flex justify-between">
+                                    <span className="text-[#8b8b94]">To win 💸</span>
+                                    <span className="font-mono font-bold text-[#7ce8bb]">{selectedOption !== null ? formatDollars(toWin) : "—"}</span>
+                                </div>
+                                {userAccount && <div className="flex justify-between border-t border-white/[0.05] pt-1.5 text-xs"><span className="text-[#6f6f78]">Balance</span><span className="font-mono text-[#8b8b94]">{formatDollars(userAccount.balance)}</span></div>}
+                            </div>
+
+                            {/* Action */}
+                            <button
+                                onClick={handleVote}
+                                disabled={voting || (walletConnected && selectedOption === null)}
+                                className={`mt-4 w-full rounded-xl py-3.5 text-sm font-extrabold transition active:scale-[0.98] ${voting
+                                    ? "cursor-wait bg-[#20d38a]/60 text-[#0a0a0c]"
+                                    : walletConnected && selectedOption !== null
+                                        ? "bg-[#20d38a] text-[#0a0a0c] shadow-lg shadow-[#20d38a]/20 hover:bg-[#3ee0a4]"
+                                        : !walletConnected
+                                            ? "bg-[#20d38a] text-[#0a0a0c] hover:bg-[#3ee0a4]"
+                                            : "cursor-not-allowed bg-white/[0.06] text-[#6f6f78]"
                                     }`}
                             >
-                                {isSettled ? t("settled") : isEnded ? "Awaiting Settlement" : timeLeft}
-                            </span>
-                        </div>
-                    </div>
-
-                    <h1 className="text-xl sm:text-2xl font-bold mb-3 tracking-tight">{poll.title}</h1>
-                    {poll.description && <p className="text-gray-400 mb-6 leading-relaxed text-sm sm:text-base">{poll.description}</p>}
-
-                    {/* Stats bar */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 text-center p-3 sm:p-4 bg-surface-50 border border-border rounded-xl">
-                        <div>
-                            <div className="text-lg font-bold text-brand-400">
-                                {formatDollars(poll.totalPoolLamports)}
-                            </div>
-                            <div className="text-xs text-gray-500">Pool</div>
-                        </div>
-                        <div>
-                            <div className="text-lg font-bold">{totalVotes}</div>
-                            <div className="text-xs text-gray-500">{t("totalVotes")}</div>
-                        </div>
-                        <div>
-                            <div className="text-lg font-bold">{poll.totalVoters}</div>
-                            <div className="text-xs text-gray-500">Voters</div>
-                        </div>
-                        <div>
-                            <div className="text-lg font-bold">
-                                {formatDollars(poll.unitPriceLamports)}
-                            </div>
-                            <div className="text-xs text-gray-500">Price/Coin</div>
-                        </div>
-                    </div>
-
-                    {/* Fee transparency */}
-                    <div className="mt-3 flex flex-wrap gap-3 sm:gap-4 text-xs text-gray-500">
-                        <span>Platform fee: {formatDollars(poll.platformFeeLamports)}</span>
-                        <span>Creator reward: {formatDollars(poll.creatorRewardLamports)}</span>
-                        <span>Seed investment: {formatDollars(poll.creatorInvestmentLamports)}</span>
-                    </div>
-
-                    {/* Resolution proof */}
-                    {isSettled && resolutionProof && (() => {
-                        // Sanitize URL: only allow http/https to prevent javascript: XSS
-                        const isSafeUrl = /^https?:\/\//i.test(resolutionProof);
-                        if (!isSafeUrl) return null;
-                        return (
-                            <div className="mt-3 flex items-center gap-2 p-2.5 bg-green-500/5 border border-green-500/20 rounded-lg">
-                                <span className="text-green-400 text-sm">🔗</span>
-                                <span className="text-xs text-gray-400">Resolution source:</span>
-                                <a
-                                    href={resolutionProof}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-xs text-brand-400 hover:text-brand-300 underline underline-offset-2 truncate"
-                                >
-                                    {resolutionProof}
-                                </a>
-                            </div>
-                        );
-                    })()}
-                </div>
-            </div>
-
-            {/* Options */}
-            <div className="bg-surface-100 border border-border rounded-2xl p-5 sm:p-8 mb-6">
-                <h2 className="font-semibold text-lg mb-4">{t("options")}</h2>
-                <div className="space-y-3">
-                    {poll.options.map((opt, i) => {
-                        const pct = totalVotes > 0 ? (poll.voteCounts[i] / totalVotes) * 100 : 0;
-                        const isWinner = isSettled && poll.winningOption === i;
-                        const isSelected = selectedOption === i;
-                        const userVotes = vote ? vote.votesPerOption[i] || 0 : 0;
-                        const optImage = poll.optionImages?.[i]
-                            ? sanitizeImageUrl(poll.optionImages[i])
-                            : "";
-
-                        return (
-                            <button
-                                key={i}
-                                onClick={() => handleOptionClick(i)}
-                                className={`w-full text-left p-4 rounded-xl transition-all border ${isWinner
-                                    ? "border-green-500/50 bg-green-500/10"
-                                    : isSelected
-                                        ? "border-brand-500 bg-brand-500/10"
-                                        : "border-border bg-surface-50 hover:border-border"
-                                    } cursor-pointer`}
-                            >
-                                <div className="flex justify-between items-center mb-2">
-                                    <div className="flex items-center gap-3">
-                                        {optImage ? (
-                                            optImage.startsWith("data:") ? (
-                                                // eslint-disable-next-line @next/next/no-img-element
-                                                <img src={optImage} alt={opt} className="w-8 h-8 rounded-full object-cover border border-border" />
-                                            ) : (
-                                                <Image src={optImage} alt={opt} width={32} height={32} unoptimized className="w-8 h-8 rounded-full object-cover border border-border" />
-                                            )
-                                        ) : (
-                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white border border-border ${i === 0 ? "bg-blue-600" : i === 1 ? "bg-red-600" : "bg-purple-600"
-                                                }`}>
-                                                {opt.charAt(0).toUpperCase()}
-                                            </div>
-                                        )}
-                                        <span className={`font-medium ${isWinner ? "text-green-400" : ""}`}>
-                                            {isWinner && "\u2713 "}{String.fromCharCode(65 + i)}. {opt}
-                                        </span>
-                                    </div>
-                                    <span className="text-sm text-gray-400 font-mono">
-                                        {poll.voteCounts[i]} votes ({pct.toFixed(1)}%)
+                                {voting ? (
+                                    <span className="flex items-center justify-center gap-2">
+                                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#0a0a0c] border-t-transparent" />
+                                        Submitting...
                                     </span>
-                                </div>
-                                <div className="h-2 bg-surface-0 rounded-full overflow-hidden">
-                                    <div
-                                        className={`h-full rounded-full transition-all ${isWinner ? "bg-green-500" : "bg-brand-600"}`}
-                                        style={{ width: `${Math.max(pct, 0.5)}%` }}
-                                    />
-                                </div>
-                                {userVotes > 0 && (
-                                    <div className="mt-2 text-xs text-brand-400">
-                                        Your votes: {userVotes} ({formatDollars(userVotes * poll.unitPriceLamports)})
-                                    </div>
-                                )}
+                                ) : !walletConnected
+                                    ? t("connectWalletToStart")
+                                    : selectedOption !== null
+                                        ? `Buy ${poll.options[selectedOption]}`
+                                        : "Select an outcome"}
                             </button>
-                        );
-                    })}
-                </div>
-            </div>
-
-            {/* Vote action */}
-            {!isEnded && !isSettled && (
-                <div className="bg-surface-100 border border-border rounded-2xl p-5 sm:p-8 mb-6">
-                    <h2 className="font-semibold text-lg mb-4">{t("step2Title")}</h2>
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-4">
-                        <div className="flex-1">
-                            <label className="block text-sm text-gray-400 mb-2">Number of coins</label>
-                            <input
-                                type="number"
-                                value={numCoins}
-                                onChange={(e) => setNumCoins(Math.max(1, parseInt(e.target.value) || 1))}
-                                min={1}
-                                className="w-full px-4 py-3 bg-surface-50 border border-border rounded-xl focus:border-brand-500/60 focus:ring-2 focus:ring-brand-500/20 outline-none transition-all"
-                            />
-                        </div>
-                        <div className="text-left sm:text-right pb-0 sm:pb-3">
-                            <div className="text-sm text-gray-400">Cost</div>
-                            <div className="text-lg font-bold font-mono">{formatDollars(cost)}</div>
-                        </div>
-                    </div>
-                    {userAccount && (
-                        <div className="text-xs text-gray-500 mt-2">
-                            Balance: {formatDollars(userAccount.balance)}
-                        </div>
+                            <p className="mt-3 text-center text-[10px] leading-4 text-[#5d5d65]">Devnet SOL only. Pool-based market — payout is your share of the final pool.</p>
+                        </section>
                     )}
-                    <button
-                        onClick={handleVote}
-                        disabled={voting || (walletConnected && selectedOption === null)}
-                        className={`w-full mt-4 py-3.5 rounded-xl font-semibold transition-all active:scale-[0.98] ${voting
-                            ? "bg-brand-500/70 cursor-wait"
-                            : walletConnected && selectedOption !== null
-                                ? "bg-brand-500 hover:bg-brand-600 shadow-lg shadow-brand-500/15"
-                                : !walletConnected
-                                    ? "bg-brand-500 hover:bg-brand-600"
-                                    : "bg-gray-700 text-gray-500 cursor-not-allowed"
-                            }`}
-                    >
-                        {voting ? (
-                            <span className="flex items-center justify-center gap-2">
-                                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                Submitting...
-                            </span>
-                        ) : !walletConnected
-                            ? t("connectWalletToStart")
-                            : selectedOption !== null
-                                ? `${t("vote")} "${poll.options[selectedOption]}"`
-                                : "Select an option above"}
-                    </button>
-                </div>
-            )}
 
-            {/* Settlement (admin only) */}
-            {isEnded && !isSettled && isAdminWallet(walletAddress) && (
-                <div className="bg-surface-100 border border-yellow-600/30 rounded-2xl p-5 sm:p-8 mb-6">
-                    <h2 className="font-semibold text-lg mb-2 text-brand-400">Poll Ended — Ready to Settle</h2>
-                    <p className="text-gray-400 text-sm mb-4">
-                        As admin, you can settle this poll. The option with the most votes wins.
-                    </p>
-                    <button
-                        onClick={handleSettle}
-                        disabled={settling}
-                        className={`w-full py-3 rounded-xl font-semibold transition-colors ${settling
-                            ? "bg-brand-500/60 text-dark-900/60 cursor-wait"
-                            : "bg-brand-500 hover:bg-brand-600 text-dark-900"
-                            }`}
-                    >
-                        {settling ? "Settling..." : t("settlePoll")}
-                    </button>
-                </div>
-            )}
+                    {/* Settlement (admin only) */}
+                    {isEnded && !isSettled && isAdminWallet(walletAddress) && (
+                        <section className="rounded-2xl border border-[#e6ff3e]/20 bg-gradient-to-b from-[#15151a] to-[#101014] p-4">
+                            <h2 className="text-sm font-bold text-[#d8ec52]">Market ended — ready to settle</h2>
+                            <p className="mt-1.5 text-xs leading-5 text-[#8b8b94]">As admin, you can settle this market. The option with the most votes wins.</p>
+                            <button
+                                onClick={handleSettle}
+                                disabled={settling}
+                                className={`mt-3 w-full rounded-xl py-3 text-sm font-extrabold transition ${settling ? "cursor-wait bg-[#20d38a]/60 text-[#0a0a0c]" : "bg-[#20d38a] text-[#0a0a0c] hover:bg-[#3ee0a4]"}`}
+                            >
+                                {settling ? "Settling..." : t("settlePoll")}
+                            </button>
+                        </section>
+                    )}
 
-            {/* Claim */}
-            {canClaim && (
-                <div className="bg-surface-100 border border-green-600/30 rounded-2xl p-5 sm:p-8 mb-6">
-                    <h2 className="font-semibold text-lg mb-2 text-green-400">{t("youWon")}</h2>
-                    <p className="text-gray-400 text-sm mb-4">
-                        Your reward:{" "}
-                        <span className="text-green-400 font-bold">{formatDollars(potentialReward)}</span>
-                    </p>
-                    <button
-                        onClick={handleClaim}
-                        disabled={claiming}
-                        className={`w-full py-3 rounded-xl font-semibold transition-colors ${claiming
-                            ? "bg-green-600/60 cursor-wait"
-                            : "bg-green-600 hover:bg-green-700"
-                            }`}
-                    >
-                        {claiming ? "Claiming..." : t("claimReward")}
-                    </button>
-                </div>
-            )}
+                    {/* Claim */}
+                    {canClaim && (
+                        <section className="rounded-2xl border border-[#20d38a]/25 bg-gradient-to-b from-[#0d1f17] to-[#101014] p-4">
+                            <h2 className="text-sm font-bold text-[#7ce8bb]">{t("youWon")}</h2>
+                            <p className="mt-1.5 text-xs text-[#8b8b94]">
+                                Your reward: <span className="font-mono font-bold text-[#7ce8bb]">{formatDollars(potentialReward)}</span>
+                            </p>
+                            <button
+                                onClick={handleClaim}
+                                disabled={claiming}
+                                className={`mt-3 w-full rounded-xl py-3 text-sm font-extrabold transition ${claiming ? "cursor-wait bg-[#20d38a]/60 text-[#0a0a0c]" : "bg-[#20d38a] text-[#0a0a0c] hover:bg-[#3ee0a4]"}`}
+                            >
+                                {claiming ? "Claiming..." : t("claimReward")}
+                            </button>
+                        </section>
+                    )}
 
-            {/* Already claimed */}
-            {vote?.claimed && (
-                <div className="bg-surface-100 border border-border rounded-2xl p-6 text-center text-gray-400">
-                    Reward already claimed for this poll.
-                </div>
-            )}
+                    {/* Already claimed */}
+                    {vote?.claimed && (
+                        <section className="rounded-2xl border border-white/[0.07] bg-[#101014] p-4 text-center text-xs text-[#8b8b94]">
+                            Reward already claimed for this market.
+                        </section>
+                    )}
 
-            {/* Creator notice */}
-            {isCreator && !isSettled && (
-                <div className="bg-surface-100 border border-border rounded-2xl p-6 text-center text-gray-500 text-sm">
-                    You created this poll — you cannot vote on it.
-                </div>
-            )}
+                    {/* Creator notice */}
+                    {isCreator && !isSettled && (
+                        <section className="rounded-2xl border border-white/[0.07] bg-[#101014] p-4 text-center text-xs text-[#6f6f78]">
+                            You created this market — you cannot trade on it.
+                        </section>
+                    )}
 
-            {/* Manage Poll (edit/delete) — visible only to creator when no votes */}
-            {canManage && (
-                <div className="bg-surface-100 border border-border rounded-2xl p-5 sm:p-6 mt-6">
-                    <h2 className="font-semibold text-lg mb-1">Manage Poll</h2>
-                    <p className="text-gray-500 text-sm mb-4">
-                        No votes yet — you can edit or delete this poll.
-                    </p>
-                    <div className="flex gap-3">
-                        <button
-                            onClick={() => setShowEditModal(true)}
-                            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 border border-border text-gray-300 rounded-xl hover:bg-dark-600 hover:border-gray-600 transition-colors font-medium"
-                        >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-                                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-                            </svg>
-                            {t("edit")} Poll
-                        </button>
-                        <button
-                            onClick={() => setShowDeleteModal(true)}
-                            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 border border-red-600/40 text-red-400 rounded-xl hover:bg-red-600/10 hover:border-red-600/60 transition-colors font-medium"
-                        >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="3 6 5 6 21 6" />
-                                <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-                            </svg>
-                            {t("delete")} Poll
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* ── Vote Distribution Chart ── */}
-            <VoteChart poll={poll} />
-
-            {/* ── Comments Section ── */}
-            <div className="mt-6">
-                <PollComments pollId={pollId} />
+                    {/* Manage (edit/delete) — creator only, no votes yet */}
+                    {canManage && (
+                        <section className="rounded-2xl border border-white/[0.07] bg-[#101014] p-4">
+                            <h2 className="text-sm font-bold text-white">Manage market</h2>
+                            <p className="mt-1 text-xs text-[#6f6f78]">No positions yet — you can edit or delete.</p>
+                            <div className="mt-3 flex gap-2">
+                                <button
+                                    onClick={() => setShowEditModal(true)}
+                                    className="flex-1 rounded-xl border border-white/[0.1] py-2.5 text-xs font-bold text-[#c9c9ce] transition hover:border-white/25 hover:text-white"
+                                >
+                                    {t("edit")}
+                                </button>
+                                <button
+                                    onClick={() => setShowDeleteModal(true)}
+                                    className="flex-1 rounded-xl border border-[#fa4669]/30 py-2.5 text-xs font-bold text-[#f78ba0] transition hover:border-[#fa4669]/60 hover:bg-[#fa4669]/10"
+                                >
+                                    {t("delete")}
+                                </button>
+                            </div>
+                        </section>
+                    )}
+                </aside>
             </div>
         </div>
     );
