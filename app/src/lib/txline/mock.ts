@@ -46,10 +46,9 @@ let scenario: DemoScenario = "BASE";
 
 /* Real 2026 World Cup knockout schedule (kick-offs in UTC). */
 const scheduledFixtures: Omit<TxLineFixture, "updatedAt">[] = [
-  { fixtureId: "wc2026-sf1-fra-esp", homeTeam: "France", awayTeam: "Spain", competition: "World Cup · Semi-final", status: "SCHEDULED", clockSeconds: 0, homeScore: 0, awayScore: 0, startTimeMs: Date.UTC(2026, 6, 14, 19, 0) },
   { fixtureId: "wc2026-sf2-eng-arg", homeTeam: "England", awayTeam: "Argentina", competition: "World Cup · Semi-final", status: "SCHEDULED", clockSeconds: 0, homeScore: 0, awayScore: 0, startTimeMs: Date.UTC(2026, 6, 15, 19, 0) },
-  { fixtureId: "wc2026-third-place", homeTeam: "Loser SF1", awayTeam: "Loser SF2", competition: "World Cup · Third place", status: "SCHEDULED", clockSeconds: 0, homeScore: 0, awayScore: 0, startTimeMs: Date.UTC(2026, 6, 18, 21, 0) },
-  { fixtureId: "wc2026-final", homeTeam: "Winner SF1", awayTeam: "Winner SF2", competition: "World Cup · Final", status: "SCHEDULED", clockSeconds: 0, homeScore: 0, awayScore: 0, startTimeMs: Date.UTC(2026, 6, 19, 19, 0) },
+  { fixtureId: "wc2026-third-place", homeTeam: "France", awayTeam: "Loser SF2", competition: "World Cup · Third place", status: "SCHEDULED", clockSeconds: 0, homeScore: 0, awayScore: 0, startTimeMs: Date.UTC(2026, 6, 18, 21, 0) },
+  { fixtureId: "wc2026-final", homeTeam: "Spain", awayTeam: "Winner SF2", competition: "World Cup · Final", status: "SCHEDULED", clockSeconds: 0, homeScore: 0, awayScore: 0, startTimeMs: Date.UTC(2026, 6, 19, 19, 0) },
 ];
 
 export function getMockFixtures(): TxLineFixture[] {

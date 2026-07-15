@@ -17,7 +17,7 @@ export type MarketplaceMarket = {
   kickoff?: string;
   clock?: string;
   score?: string;
-  /** Display date for settled markets, e.g. "Jul 10". */
+  /** Display date for settled markets, e.g. "Jul 13". */
   endedAt?: string;
   question?: string;
   window?: string;
@@ -44,53 +44,33 @@ export const PRIMARY_MARKET_NAV = [
 export const SPORT_TABS = ["All markets", "Goals", "Totals", "Goal Gap", "Match Result", "Upcoming", "Settled"] as const;
 
 /* 2026 FIFA World Cup knockout schedule (kick-offs converted from NPT to UTC).
-   Semi-final 1: Jul 15 00:45 NPT → Jul 14 19:00 UTC
-   Semi-final 2: Jul 16 00:45 NPT → Jul 15 19:00 UTC
-   Third place:  Jul 19 02:45 NPT → Jul 18 21:00 UTC
-   Final:        Jul 20 00:45 NPT → Jul 19 19:00 UTC */
+   Semi-final 1: France 0–2 Spain (FT Jul 13) — Spain reach the final
+   Semi-final 2: England vs Argentina — Jul 16 00:45 NPT → Jul 15 19:00 UTC
+   Third place:  France vs SF2 loser — Jul 19 02:45 NPT → Jul 18 21:00 UTC
+   Final:        Spain vs SF2 winner — Jul 20 00:45 NPT → Jul 19 19:00 UTC */
 export const KICKOFFS = {
-  semiFinal1: "2026-07-14T19:00:00Z",
   semiFinal2: "2026-07-15T19:00:00Z",
   thirdPlace: "2026-07-18T21:00:00Z",
   final: "2026-07-19T19:00:00Z",
 } as const;
 
 export const NEXT_KICKOFF = {
-  title: "France vs Spain",
+  title: "England vs Argentina",
   label: "Semi-final",
-  countdown: "1d : 14h : 55m : 0s",
-  kickoff: KICKOFFS.semiFinal1,
+  countdown: "0d : 12h : 12m : 0s",
+  kickoff: KICKOFFS.semiFinal2,
 } as const;
 
 export const FEATURED_MARKETS: MarketplaceMarket[] = [
-  {
-    id: "featured-fra-esp-sf",
-    title: "France vs Spain",
-    competition: "World Cup 2026 · Semi-final",
-    sport: "Match Result",
-    status: "upcoming",
-    countdown: "1d : 14h : 55m : 0s",
-    kickoff: KICKOFFS.semiFinal1,
-    question: "Who reaches the final? · Jul 15, 12:45 am NPT",
-    pool: "24.6 SOL pool",
-    combo: true,
-    featured: true,
-    href: "/world-cup",
-    tags: ["Upcoming", "World Cup", "Match Result"],
-    outcomes: [
-      { label: "France", symbol: "FRA", price: "$185", probability: 54 },
-      { label: "Spain", symbol: "ESP", price: "$217", probability: 46 },
-    ],
-  },
   {
     id: "featured-eng-arg-sf",
     title: "England vs Argentina",
     competition: "World Cup 2026 · Semi-final",
     sport: "Match Result",
     status: "upcoming",
-    countdown: "2d : 14h : 55m : 0s",
+    countdown: "0d : 12h : 12m : 0s",
     kickoff: KICKOFFS.semiFinal2,
-    question: "Who reaches the final? · Jul 16, 12:45 am NPT",
+    question: "Who joins Spain in the final? · Jul 16, 12:45 am NPT",
     pool: "21.4 SOL pool",
     combo: true,
     featured: true,
@@ -107,106 +87,72 @@ export const FEATURED_MARKETS: MarketplaceMarket[] = [
     competition: "FIFA World Cup 2026 · Outright",
     sport: "Match Result",
     status: "upcoming",
-    countdown: "6d : 14h : 55m : 0s",
+    countdown: "4d : 12h : 12m : 0s",
     kickoff: KICKOFFS.final,
-    question: "Four teams left — final on Jul 20, 12:45 am NPT",
-    pool: "31.2 SOL pool",
+    question: "Spain await the winner of England–Argentina · Final Jul 20",
+    pool: "34.8 SOL pool",
     combo: true,
     featured: true,
     href: "/world-cup",
     tags: ["Upcoming", "World Cup", "Outright"],
     outcomes: [
-      { label: "France", symbol: "FRA", price: "$313", probability: 32 },
-      { label: "Spain", symbol: "ESP", price: "$385", probability: 26 },
-      { label: "Argentina", symbol: "ARG", price: "$455", probability: 22 },
-      { label: "England", symbol: "ENG", price: "$500", probability: 20 },
+      { label: "Spain", symbol: "ESP", price: "$217", probability: 46 },
+      { label: "Argentina", symbol: "ARG", price: "$345", probability: 29 },
+      { label: "England", symbol: "ENG", price: "$400", probability: 25 },
+    ],
+  },
+  {
+    id: "featured-final-90",
+    title: "Final goes beyond 90 minutes?",
+    competition: "World Cup 2026 · Final · Jul 20",
+    sport: "Match Result",
+    status: "upcoming",
+    countdown: "4d : 12h : 12m : 0s",
+    kickoff: KICKOFFS.final,
+    question: "Extra time or penalties in the final? · Jul 20, 12:45 am NPT",
+    pool: "4.1 SOL pool",
+    featured: true,
+    href: "/world-cup",
+    tags: ["Upcoming", "World Cup", "Match Result"],
+    outcomes: [
+      { label: "Yes", symbol: "YES", price: "$294", probability: 34 },
+      { label: "No", symbol: "NO", price: "$152", probability: 66 },
     ],
   },
 ];
 
 export const FEATURED_MARKET = FEATURED_MARKETS[0];
 
-/* No matches are being played right now — the next fixture is semi-final 1. */
+/* No matches are being played right now — the next fixture is semi-final 2. */
 export const LIVE_MARKETS: MarketplaceMarket[] = [];
 
 export const SOCCER_SPOTLIGHT: MarketplaceMarket = {
-  id: "spotlight-fra-esp",
-  title: "France vs Spain",
+  id: "spotlight-eng-arg",
+  title: "England vs Argentina",
   competition: "World Cup 2026 · Semi-final",
   sport: "Match Result",
   status: "upcoming",
-  countdown: "1d : 14h : 55m : 0s",
-  kickoff: KICKOFFS.semiFinal1,
-  question: "Who reaches the final?",
-  image: "/spotlight-fra-esp.png",
+  countdown: "0d : 12h : 12m : 0s",
+  kickoff: KICKOFFS.semiFinal2,
+  question: "Who joins Spain in the final?",
+  image: "/spotlight-eng-arg.avif",
   href: "/world-cup",
   tags: ["Upcoming", "Match Result"],
   outcomes: [
-    { label: "France", symbol: "FRA", price: "$185", probability: 54 },
-    { label: "Spain", symbol: "ESP", price: "$217", probability: 46 },
+    { label: "Argentina", symbol: "ARG", price: "$189", probability: 53 },
+    { label: "England", symbol: "ENG", price: "$213", probability: 47 },
   ],
 };
 
 export const SPORTS_MARKETS: MarketplaceMarket[] = [
-  /* ── Upcoming: semi-finals ── */
-  {
-    id: "sf1-result",
-    title: "France vs Spain",
-    competition: "World Cup 2026 · Semi-final",
-    sport: "Match Result",
-    status: "upcoming",
-    countdown: "1d : 14h : 55m : 0s",
-    kickoff: KICKOFFS.semiFinal1,
-    question: "Who wins the semi-final?",
-    pool: "14.2 SOL",
-    combo: true,
-    href: "/world-cup",
-    tags: ["Upcoming", "Match Result"],
-    outcomes: [
-      { label: "France", symbol: "FRA", price: "$185", probability: 54 },
-      { label: "Spain", symbol: "ESP", price: "$217", probability: 46 },
-    ],
-  },
-  {
-    id: "sf1-o25",
-    title: "Over 2.5 goals — France vs Spain",
-    competition: "World Cup 2026 · Semi-final",
-    sport: "Totals",
-    status: "upcoming",
-    countdown: "1d : 14h : 55m : 0s",
-    kickoff: KICKOFFS.semiFinal1,
-    pool: "6.8 SOL",
-    href: "/world-cup",
-    tags: ["Upcoming", "Totals", "Goals"],
-    outcomes: [
-      { label: "Over 2.5 goals", symbol: "OVR", price: "$208", probability: 48 },
-      { label: "Under 2.5 goals", symbol: "UND", price: "$192", probability: 52 },
-    ],
-  },
-  {
-    id: "sf1-btts",
-    title: "Both teams to score — France vs Spain",
-    competition: "World Cup 2026 · Semi-final",
-    sport: "Goals",
-    status: "upcoming",
-    countdown: "1d : 14h : 55m : 0s",
-    kickoff: KICKOFFS.semiFinal1,
-    pool: "5.4 SOL",
-    combo: true,
-    href: "/world-cup",
-    tags: ["Upcoming", "Goals"],
-    outcomes: [
-      { label: "Yes", symbol: "YES", price: "$182", probability: 55 },
-      { label: "No", symbol: "NO", price: "$222", probability: 45 },
-    ],
-  },
+  /* ── Upcoming: semi-final 2 ── */
   {
     id: "sf2-result",
     title: "England vs Argentina",
     competition: "World Cup 2026 · Semi-final",
     sport: "Match Result",
     status: "upcoming",
-    countdown: "2d : 14h : 55m : 0s",
+    countdown: "0d : 12h : 12m : 0s",
     kickoff: KICKOFFS.semiFinal2,
     question: "Who wins the semi-final?",
     pool: "12.6 SOL",
@@ -224,7 +170,7 @@ export const SPORTS_MARKETS: MarketplaceMarket[] = [
     competition: "World Cup 2026 · Semi-final",
     sport: "Totals",
     status: "upcoming",
-    countdown: "2d : 14h : 55m : 0s",
+    countdown: "0d : 12h : 12m : 0s",
     kickoff: KICKOFFS.semiFinal2,
     pool: "5.9 SOL",
     href: "/world-cup",
@@ -235,12 +181,29 @@ export const SPORTS_MARKETS: MarketplaceMarket[] = [
     ],
   },
   {
+    id: "sf2-btts",
+    title: "Both teams to score — England vs Argentina",
+    competition: "World Cup 2026 · Semi-final",
+    sport: "Goals",
+    status: "upcoming",
+    countdown: "0d : 12h : 12m : 0s",
+    kickoff: KICKOFFS.semiFinal2,
+    pool: "4.8 SOL",
+    combo: true,
+    href: "/world-cup",
+    tags: ["Upcoming", "Goals"],
+    outcomes: [
+      { label: "Yes", symbol: "YES", price: "$185", probability: 54 },
+      { label: "No", symbol: "NO", price: "$217", probability: 46 },
+    ],
+  },
+  {
     id: "sf2-gap",
     title: "Goal gap over 1.5 — England vs Argentina",
     competition: "World Cup 2026 · Semi-final",
     sport: "Goal Gap",
     status: "upcoming",
-    countdown: "2d : 14h : 55m : 0s",
+    countdown: "0d : 12h : 12m : 0s",
     kickoff: KICKOFFS.semiFinal2,
     pool: "3.7 SOL",
     href: "/world-cup",
@@ -250,16 +213,16 @@ export const SPORTS_MARKETS: MarketplaceMarket[] = [
       { label: "No", symbol: "NO", price: "$139", probability: 72 },
     ],
   },
-  /* ── Upcoming: third place & final (teams decided by the semis) ── */
+  /* ── Upcoming: third place & final ── */
   {
     id: "third-place-o25",
     title: "Over 2.5 goals — Third-place play-off",
     competition: "World Cup 2026 · Jul 19",
     sport: "Totals",
     status: "upcoming",
-    countdown: "5d : 16h : 55m : 0s",
+    countdown: "3d : 14h : 12m : 0s",
     kickoff: KICKOFFS.thirdPlace,
-    question: "Losers of the semi-finals meet on Jul 19, 2:45 am NPT",
+    question: "France meet the England–Argentina losers · Jul 19, 2:45 am NPT",
     pool: "2.8 SOL",
     href: "/world-cup",
     tags: ["Upcoming", "Totals", "Goals"],
@@ -274,9 +237,9 @@ export const SPORTS_MARKETS: MarketplaceMarket[] = [
     competition: "World Cup 2026 · Final · Jul 20",
     sport: "Match Result",
     status: "upcoming",
-    countdown: "6d : 14h : 55m : 0s",
+    countdown: "4d : 12h : 12m : 0s",
     kickoff: KICKOFFS.final,
-    question: "Winners of the semi-finals meet on Jul 20, 12:45 am NPT",
+    question: "Spain await the England–Argentina winner · Jul 20, 12:45 am NPT",
     pool: "4.1 SOL",
     href: "/world-cup",
     tags: ["Upcoming", "Match Result"],
@@ -285,7 +248,57 @@ export const SPORTS_MARKETS: MarketplaceMarket[] = [
       { label: "No", symbol: "NO", price: "$152", probability: 66 },
     ],
   },
-  /* ── Settled: quarter-finals (resolved from final scores) ── */
+  /* ── Settled: semi-final 1 (France 0–2 Spain, Jul 13) ── */
+  {
+    id: "sf1-result",
+    title: "France vs Spain",
+    competition: "World Cup 2026 · Semi-final",
+    sport: "Match Result",
+    status: "ended",
+    score: "0 – 2",
+    endedAt: "Jul 13",
+    question: "Who wins the semi-final?",
+    pool: "14.2 SOL",
+    href: "/world-cup",
+    tags: ["Settled", "Match Result"],
+    outcomes: [
+      { label: "France", symbol: "FRA", price: "$0", probability: 0 },
+      { label: "Spain", symbol: "ESP", price: "$100", probability: 100, won: true },
+    ],
+  },
+  {
+    id: "sf1-o25",
+    title: "Over 2.5 goals — France vs Spain",
+    competition: "World Cup 2026 · Semi-final",
+    sport: "Totals",
+    status: "ended",
+    score: "0 – 2",
+    endedAt: "Jul 13",
+    pool: "6.8 SOL",
+    href: "/world-cup",
+    tags: ["Settled", "Totals", "Goals"],
+    outcomes: [
+      { label: "Over 2.5 goals", symbol: "OVR", price: "$0", probability: 0 },
+      { label: "Under 2.5 goals", symbol: "UND", price: "$100", probability: 100, won: true },
+    ],
+  },
+  {
+    id: "sf1-btts",
+    title: "Both teams to score — France vs Spain",
+    competition: "World Cup 2026 · Semi-final",
+    sport: "Goals",
+    status: "ended",
+    score: "0 – 2",
+    endedAt: "Jul 13",
+    pool: "5.4 SOL",
+    href: "/world-cup",
+    tags: ["Settled", "Goals"],
+    outcomes: [
+      { label: "Yes", symbol: "YES", price: "$0", probability: 0 },
+      { label: "No", symbol: "NO", price: "$100", probability: 100, won: true },
+    ],
+  },
+  /* ── Settled: quarter-finals ── */
   {
     id: "qf-fra-mar-result",
     title: "France vs Morocco",
