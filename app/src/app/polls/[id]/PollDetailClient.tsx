@@ -370,10 +370,10 @@ export default function PollDetailClient() {
                 <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
                     {!isEnded && !isSettled && (
                         <section className="rounded-2xl border border-white/[0.07] bg-gradient-to-b from-[#15151a] to-[#101014] p-4 shadow-2xl shadow-black/30">
-                            {/* Buy / Sell tabs (pool market — no secondary selling) */}
-                            <div className="flex border-b border-white/[0.06] text-sm font-extrabold">
-                                <span className="border-b-2 border-[#20d38a] px-1 pb-2 text-white">Buy</span>
-                                <span className="ml-5 cursor-not-allowed px-1 pb-2 text-[#4a4a52]" title="Pool market — positions settle at resolution, no secondary selling">Sell</span>
+                            {/* Buy only — the pooled protocol has no pre-settlement exit */}
+                            <div className="flex items-center justify-between border-b border-white/[0.06] pb-2 text-sm font-extrabold">
+                                <span className="text-white">Buy position</span>
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-[#6f6f78]">Pooled market</span>
                             </div>
 
                             {/* Outcome selector */}
@@ -458,7 +458,7 @@ export default function PollDetailClient() {
                                         ? `Buy ${poll.options[selectedOption]}`
                                         : "Select an outcome"}
                             </button>
-                            <p className="mt-3 text-center text-[10px] leading-4 text-[#5d5d65]">Devnet SOL has no real-money value. Pool-based market — payout is your share of the final pool; positions cannot be sold before resolution.</p>
+                            <p className="mt-3 text-center text-[10px] leading-4 text-[#5d5d65]">Devnet SOL has no real-money value. Positions remain locked until market settlement under Whistly&apos;s current pooled-market model.</p>
                         </section>
                     )}
 

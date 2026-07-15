@@ -1493,3 +1493,6 @@ html:not(.dark) .hover\:bg-dark-600:hover {
 .market-featured-switchers > button:hover { background: #232329; border-color: rgba(255,255,255,.18); }
 .market-featured-switcher-label { min-height: 30px; border: 1px solid rgba(255,255,255,.08); border-radius: .65rem; background: #1a1a1f; transition: background var(--market-fast), border var(--market-fast); }
 .market-featured-switcher-label:hover { background: #232329; border-color: rgba(255,255,255,.18); }
+
+/* Honest-chart label: hero history line is illustrative, only the endpoint is live */
+.chart-illustrative { position: absolute; left: 0; top: -1.1rem; color: #5d5d65; font: 650 .55rem/1 var(--font-sans, sans-serif); letter-spacing: .08em; text-transform: uppercase; }

@@ -78,6 +78,40 @@ Production verified `connected` with real World Cup fixtures.
   wallet (all render paths verified; gating logic unchanged from the audited original).
 - `/markets` route not added; discovery lives at `/world-cup` + `/events` (aliased).
 
+## Credibility pass addendum (2026-07-15, pre-deployment)
+
+- **Sell removed entirely** from the trade ticket (previously visible-but-disabled);
+  header reads "Buy position · Pooled market".
+- Ticket notice: **"Positions remain locked until market settlement under Whistly's
+  current pooled-market model."** alongside "Devnet SOL has no real-money value."
+- **Chart honesty:** market detail uses `VoteChart` (real vote distribution) and `/live`
+  uses `LiveMarketGraph` (real in-session samples of the on-chain pool, starts empty).
+  The homepage hero chart — the only simulated series — now carries an explicit
+  **"Illustrative — current odds from live pool"** label (homepage design otherwise
+  unchanged).
+- **Removed fake surfaces found in the terms sweep:** dead route
+  `/match/fifwc-nor-eng-2026-07-11` (hardcoded mock with fake trades, Sell tabs, and
+  dollar amounts) and unused components `LiveComments.tsx` / `FeaturedPollHeroCard.tsx`
+  (canned fake comments). None were linked from the app, but the route was publicly
+  reachable.
+- Terms sweep results: no user-facing "cash out", "limit order", "market order",
+  "price history", or ¢/USD labels remain; "order book" appears only in the honest
+  disclaimer "Pool-based liquidity, not an order book"; `total_pool_cents` is an
+  internal DB column name (not user-facing); schema.org `priceCurrency` metadata
+  retained (price "0", SEO structured data).
+- Re-verified after changes: `tsc` pass · 98 tests pass / 0 fail · production build pass.
+
+## Plain-language statement
+
+- Whistly uses a **real pari-mutuel prediction-market model** on Solana devnet.
+- Users can **buy positions using devnet SOL**; every buy, settlement, and claim is a
+  wallet-signed on-chain transaction.
+- **Positions cannot currently be sold before settlement.** The UI says so and offers
+  no sell control.
+- **No fake order book and no fabricated historical chart is displayed** on any trading
+  page; the homepage's decorative chart is labeled illustrative.
+- **Devnet SOL has no real-money value**, and the product states this on the ticket.
+
 ## Completion statement
 
 Per the final completion rule: foundational protocol work (real shares, sell, orders)

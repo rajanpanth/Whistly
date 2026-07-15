@@ -188,5 +188,6 @@ export default function MarketProbabilityChart({ market }: { market: Marketplace
       </div>)}
     </div>}
     <div className="chart-times" aria-hidden="true">{axisTimeLabels.map((label, index) => <span key={`${index}-${label}`}>{label}</span>)}</div>
+    <span className="chart-illustrative">Illustrative — current odds from live pool</span>
   </div>;
 }
