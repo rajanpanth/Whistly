@@ -309,7 +309,7 @@ export default function PollDetailClient() {
                                                     ? { background: optionColor(i), color: "#0a0a0c" }
                                                     : { background: optionColor(i) + "1f", color: optionColor(i), border: `1px solid ${optionColor(i)}40` }}
                                             >
-                                                Buy {Math.round(pct)}¢
+                                                Buy · {Math.round(pct)}%
                                             </button>
                                         ) : (
                                             <span className={`rounded-lg px-3 py-1.5 text-xs font-extrabold ${isWinner ? "bg-[#20d38a]/15 text-[#7ce8bb]" : "bg-white/[0.04] text-[#6f6f78]"}`}>
@@ -390,7 +390,7 @@ export default function PollDetailClient() {
                                                 ? { background: optionColor(i), color: "#0a0a0c" }
                                                 : { background: "#0d0d11", color: "#c9c9ce", border: "1px solid rgba(255,255,255,0.08)" }}
                                         >
-                                            {opt} {Math.round(pctOf(i))}¢
+                                            {opt} {Math.round(pctOf(i))}%
                                         </button>
                                     );
                                 })}
@@ -425,7 +425,7 @@ export default function PollDetailClient() {
                             {/* Order summary — Polymarket format */}
                             <div className="mt-4 space-y-1.5 rounded-xl border border-white/[0.05] bg-[#0d0d11] p-3 text-sm">
                                 <div className="flex justify-between text-xs"><span className="text-[#6f6f78]">Shares</span><span className="font-mono font-bold text-white">{numCoins}</span></div>
-                                <div className="flex justify-between text-xs"><span className="text-[#6f6f78]">Avg price</span><span className="font-mono text-[#8b8b94]">{selectedOption !== null ? `${Math.round(pctOf(selectedOption))}¢` : "—"}</span></div>
+                                <div className="flex justify-between text-xs"><span className="text-[#6f6f78]">Entry probability</span><span className="font-mono text-[#8b8b94]">{selectedOption !== null ? `${Math.round(pctOf(selectedOption))}%` : "—"}</span></div>
                                 <div className="flex justify-between text-xs"><span className="text-[#6f6f78]">Cost</span><span className="font-mono text-[#8b8b94]">{formatDollars(cost)}</span></div>
                                 <div className="flex justify-between border-t border-white/[0.05] pt-1.5">
                                     <span className="font-bold text-[#8b8b94]">To win 💸</span>
@@ -458,7 +458,7 @@ export default function PollDetailClient() {
                                         ? `Buy ${poll.options[selectedOption]}`
                                         : "Select an outcome"}
                             </button>
-                            <p className="mt-3 text-center text-[10px] leading-4 text-[#5d5d65]">Devnet SOL only. Pool-based market — payout is your share of the final pool.</p>
+                            <p className="mt-3 text-center text-[10px] leading-4 text-[#5d5d65]">Devnet SOL has no real-money value. Pool-based market — payout is your share of the final pool; positions cannot be sold before resolution.</p>
                         </section>
                     )}
 

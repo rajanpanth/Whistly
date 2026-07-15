@@ -300,7 +300,7 @@ function PositionCard({ position, onClaim }: { position: Position; onClaim: (pol
                     <span>·</span>
                     <span>{formatDollarsShort(staked)} staked</span>
                 </div>
-                <div className="mt-1 flex flex-wrap gap-3 text-[10px] text-[#6f6f78]"><span>Estimated payout: {status === "active" ? "Pending" : formatDollarsShort(Math.max(0, staked + pnl))}</span><span>Settlement tx: unavailable</span><span>Claim tx: unavailable</span></div>
+                <div className="mt-1 flex flex-wrap gap-3 text-[10px] text-[#6f6f78]"><span>Estimated payout: {status === "active" ? "Pending settlement" : formatDollarsShort(Math.max(0, staked + pnl))}</span>{status === "active" && <span>Exit value unavailable under the current pooled market model</span>}</div>
             </div>
 
             {/* P&L + action */}
