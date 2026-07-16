@@ -55,3 +55,4 @@ test-ledger/
 # package-lock.json
 # yarn.lock
 demo-video/
+.keys/
