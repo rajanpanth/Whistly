@@ -32,9 +32,13 @@ export default defineConfig({
     timezoneId: "UTC",
     locale: "en-US",
   },
+  // Reuse an already-running dev server at PW_BASE_URL. Never spawn a second
+  // `next dev` against the same .next directory — two dev servers sharing
+  // .next corrupt the build manifest (ENOENT app-build-manifest.json).
   webServer: {
-    command: "npx next dev -p 3005",
-    url: "http://localhost:3005",
+    command:
+      "node -e \"console.log('reusing existing dev server; not spawning a second one')\"",
+    url: process.env.PW_BASE_URL || "http://localhost:3005",
     reuseExistingServer: true,
     timeout: 120_000,
   },

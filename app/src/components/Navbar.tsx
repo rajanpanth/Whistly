@@ -10,6 +10,11 @@ import { useApp } from "./Providers";
 import { shortAddr } from "@/lib/utils";
 import WalletConnectModal from "./WalletConnectModal";
 
+// V2 trading routes render their own header (app/(trading)); suppress the
+// global Navbar there. The homepage `/` is intentionally excluded so its
+// chrome stays frozen.
+const TRADING_ROUTE_RE = /^\/(markets|market\/|event\/|positions|orders)/;
+
 export function Navbar() {
   const pathname = usePathname();
   const router = useRouter();
@@ -23,6 +28,9 @@ export function Navbar() {
     event.preventDefault();
     if (query.trim()) router.push(`/events?q=${encodeURIComponent(query.trim())}`);
   }
+
+  // V2 trading routes render their own dedicated header (app/(trading)).
+  if (pathname && TRADING_ROUTE_RE.test(pathname)) return null;
 
   return <header className="market-header">
     <div className="market-header-top"><BrandMark /><form role="search" onSubmit={submitSearch}><Search size={15} /><label className="sr-only" htmlFor="market-search">Search markets</label><input id="market-search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Search for anything" /><kbd>/</kbd></form><div className="market-header-actions">

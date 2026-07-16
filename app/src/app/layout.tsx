@@ -10,7 +10,7 @@ import PageTransition from "@/components/PageTransition";
 import AuroraBackground from "@/components/AuroraBackground";
 import AppProviders from "@/components/AppProviders";
 import { Toaster } from "react-hot-toast";
-import Footer from "@/components/Footer";
+import ConditionalFooter from "@/components/ConditionalFooter";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-body" });
 const spaceGrotesk = Space_Grotesk({
@@ -106,7 +106,7 @@ export default function RootLayout({
               </PageTransition>
             </main>
           </ErrorBoundary>
-          <Footer />
+          <ConditionalFooter />
           <InstallPrompt />
           <WebVitals />
           <Toaster

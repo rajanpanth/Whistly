@@ -207,7 +207,6 @@ class MemoryOrderStore implements OrderStore {
 
 // ─── Supabase adapter ───────────────────────────────────────────────────────
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
 function rowToOrder(row: any): OrderRecord {
     return {
         orderHash: row.order_hash,
@@ -413,7 +412,6 @@ function rowToFill(row: any): FillRecord {
         createdAt: new Date(row.created_at).getTime(),
     };
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
 
 // ─── Adapter selection ──────────────────────────────────────────────────────
 

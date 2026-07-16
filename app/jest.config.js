@@ -17,7 +17,9 @@ const config = {
         "<rootDir>/src/**/*.test.{ts,tsx}",
     ],
     transformIgnorePatterns: [
-        "/node_modules/(?!(@solana|bs58|tweetnacl|superstruct)/)",
+        // Transform the ESM deps in the @solana/web3.js chain too, or Jest
+        // chokes on `export` in jayson/rpc-websockets/@noble.
+        "/node_modules/(?!(@solana|@noble|bs58|tweetnacl|superstruct|jayson|rpc-websockets|uuid|@coral-xyz)/)",
     ],
 };
 

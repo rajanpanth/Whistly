@@ -2,7 +2,7 @@
 //
 // Bump CACHE_VERSION on every release to bust the old cache.
 // The activate event automatically purges old versioned caches.
-const CACHE_VERSION = 5;
+const CACHE_VERSION = 6;
 const CACHE_NAME = `instinctfi-v${CACHE_VERSION}`;
 // #70: Only precache truly static pages. Dynamic Next.js routes (/polls, /create,
 // /leaderboard, etc.) use stale-while-revalidate at fetch time instead.

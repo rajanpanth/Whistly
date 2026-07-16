@@ -172,76 +172,11 @@ export async function validateOrder(input: PostOrderInput): Promise<ValidationRe
 }
 
 // ─── Matching ───────────────────────────────────────────────────────────────
-
-interface MatchCandidate {
-    resting: OrderRecord;
-    /** shares fillable against this resting order */
-    quantity: bigint;
-    mode: "TRANSFER" | "MINT" | "BURN";
-}
-
-/**
- * Find crossable resting orders for `incoming`, best price first then FIFO.
- *  - TRANSFER: opposite side, same outcome, prices cross.
- *  - MINT (binary): both BUY, complementary outcomes, pMaker + pTaker ≥ 100%.
- *  - BURN (binary): both SELL, complementary outcomes, pMaker + pTaker ≤ 100%.
- * Execution always happens at the RESTING (maker) order's price.
- */
-export function findMatches(
-    incoming: { side: OrderSideStr; outcomeIndex: number; priceBps: number; quantity: bigint; maker: string },
-    book: OrderRecord[],
-    numOutcomes: number
-): MatchCandidate[] {
-    const now = Math.floor(Date.now() / 1000);
-    const live = book.filter(
-        (o) =>
-            o.expiry > now &&
-            o.maker !== incoming.maker &&
-            o.quantity - o.filledQuantity > 0
-    );
-
-    const candidates: { c: MatchCandidate; sortPrice: number }[] = [];
-    for (const resting of live) {
-        const remaining = BigInt(resting.quantity - resting.filledQuantity);
-        if (resting.side !== incoming.side && resting.outcomeIndex === incoming.outcomeIndex) {
-            const buyPrice = incoming.side === "BUY" ? incoming.priceBps : resting.priceBps;
-            const sellPrice = incoming.side === "BUY" ? resting.priceBps : incoming.priceBps;
-            if (buyPrice >= sellPrice) {
-                candidates.push({
-                    c: { resting, quantity: remaining, mode: "TRANSFER" },
-                    // Buyer wants lowest ask; seller wants highest bid.
-                    sortPrice: incoming.side === "BUY" ? resting.priceBps : -resting.priceBps,
-                });
-            }
-        } else if (
-            numOutcomes === 2 &&
-            resting.side === incoming.side &&
-            resting.outcomeIndex !== incoming.outcomeIndex
-        ) {
-            const sum = resting.priceBps + incoming.priceBps;
-            if (incoming.side === "BUY" && sum >= PRICE_SCALE) {
-                // Incoming pays (100% - resting price): cheapest first =
-                // highest resting price first.
-                candidates.push({
-                    c: { resting, quantity: remaining, mode: "MINT" },
-                    sortPrice: -resting.priceBps,
-                });
-            } else if (incoming.side === "SELL" && sum <= PRICE_SCALE) {
-                // Incoming receives (100% - resting price): highest proceeds
-                // first = lowest resting price first.
-                candidates.push({
-                    c: { resting, quantity: remaining, mode: "BURN" },
-                    sortPrice: resting.priceBps,
-                });
-            }
-        }
-    }
-
-    candidates.sort(
-        (a, b) => a.sortPrice - b.sortPrice || a.c.resting.createdAt - b.c.resting.createdAt
-    );
-    return candidates.map((x) => x.c);
-}
+// Pure crossing logic lives in matchLogic.ts (web3-free, unit-tested);
+// imported for internal use and re-exported so callers can keep importing
+// findMatches from the engine.
+import { findMatches } from "./matchLogic";
+export { findMatches };
 
 // ─── Settlement ─────────────────────────────────────────────────────────────
 
