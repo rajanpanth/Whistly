@@ -26,12 +26,14 @@ pub const FILL_MODE_BURN: u8 = 2;
 //     msg_offset u16, msg_size u16, msg_ix_index u16
 // An ix_index of u16::MAX means "this instruction".
 
-fn verify_ed25519_binding(
+/// Extract the (signer, message) pair from the ed25519 instruction at
+/// `ix_index`. The ed25519 program has already verified the signature by
+/// the time our instruction runs — the transaction would have failed
+/// otherwise — so the returned pair is authenticated.
+fn extract_ed25519_signed(
     instructions_sysvar: &AccountInfo,
     ix_index: u8,
-    expected_signer: &Pubkey,
-    expected_message: &[u8],
-) -> Result<()> {
+) -> Result<(Pubkey, Vec<u8>)> {
     let ix = load_instruction_at_checked(ix_index as usize, instructions_sysvar)
         .map_err(|_| error!(ErrorV2::BadSignatureIntrospection))?;
     require_keys_eq!(
@@ -69,16 +71,12 @@ fn verify_ed25519_binding(
     let pk = data
         .get(pk_offset..pk_offset + 32)
         .ok_or_else(|| error!(ErrorV2::BadSignatureIntrospection))?;
-    require!(
-        pk == expected_signer.to_bytes(),
-        ErrorV2::OrderMakerMismatch
-    );
+    let signer = Pubkey::try_from(pk).map_err(|_| error!(ErrorV2::BadSignatureIntrospection))?;
 
     let msg = data
         .get(msg_offset..msg_offset + msg_size)
         .ok_or_else(|| error!(ErrorV2::BadSignatureIntrospection))?;
-    require!(msg == expected_message, ErrorV2::BadOrderPayload);
-    Ok(())
+    Ok((signer, msg.to_vec()))
 }
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -156,35 +154,32 @@ fn init_or_check_fill_state(
 // ─── settle_fill_v2 ─────────────────────────────────────────────────────────
 
 #[derive(Accounts)]
-#[instruction(
-    maker_order: Vec<u8>,
-    taker_order: Vec<u8>,
-    maker_hash: [u8; 32],
-    taker_hash: [u8; 32]
-)]
+#[instruction(maker_hash: [u8; 32], taker_hash: [u8; 32])]
 pub struct SettleFillV2<'info> {
     /// Matching-engine operator: pays rent for fill states, cannot move
     /// user funds outside the signed order constraints.
     #[account(mut)]
     pub operator: Signer<'info>,
+    // All accounts boxed: this struct has 11 entries and lives in a 4KB
+    // SBF stack frame — unboxed it overflows and hard-faults at runtime.
     #[account(
         seeds = [b"config_v2"],
         bump = config.bump,
         constraint = config.operator == operator.key() @ ErrorV2::UnauthorizedOperator
     )]
-    pub config: Account<'info, ConfigV2>,
+    pub config: Box<Account<'info, ConfigV2>>,
     #[account(
         mut,
         seeds = [b"market_v2", market.market_id.to_le_bytes().as_ref()],
         bump = market.bump
     )]
-    pub market: Account<'info, MarketV2>,
+    pub market: Box<Account<'info, MarketV2>>,
     #[account(
         mut,
         seeds = [b"vault_v2", market.key().as_ref()],
         bump = market.vault_bump
     )]
-    pub vault: Account<'info, VaultV2>,
+    pub vault: Box<Account<'info, VaultV2>>,
     #[account(
         init_if_needed,
         payer = operator,
@@ -192,7 +187,7 @@ pub struct SettleFillV2<'info> {
         seeds = [b"ofill_v2", maker_hash.as_ref()],
         bump
     )]
-    pub maker_fill: Account<'info, OrderFillStateV2>,
+    pub maker_fill: Box<Account<'info, OrderFillStateV2>>,
     #[account(
         init_if_needed,
         payer = operator,
@@ -200,31 +195,28 @@ pub struct SettleFillV2<'info> {
         seeds = [b"ofill_v2", taker_hash.as_ref()],
         bump
     )]
-    pub taker_fill: Account<'info, OrderFillStateV2>,
+    pub taker_fill: Box<Account<'info, OrderFillStateV2>>,
     // Owner/discriminator checked by Anchor; identity (owner field ==
     // signed order maker, market, outcome) is enforced in the handler
     // because those values come from the signed payloads. Positions and
     // balances only ever exist at canonical PDA seeds, so field equality
     // uniquely identifies the account.
     #[account(mut)]
-    pub maker_balance: Account<'info, BalanceV2>,
+    pub maker_balance: Box<Account<'info, BalanceV2>>,
     #[account(mut)]
-    pub taker_balance: Account<'info, BalanceV2>,
+    pub taker_balance: Box<Account<'info, BalanceV2>>,
     #[account(mut)]
-    pub maker_position: Account<'info, PositionV2>,
+    pub maker_position: Box<Account<'info, PositionV2>>,
     #[account(mut)]
-    pub taker_position: Account<'info, PositionV2>,
+    pub taker_position: Box<Account<'info, PositionV2>>,
     /// CHECK: instructions sysvar for ed25519 introspection.
     #[account(address = INSTRUCTIONS_SYSVAR_ID)]
     pub instructions_sysvar: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn settle_fill_v2(
     ctx: Context<SettleFillV2>,
-    maker_order: Vec<u8>,
-    taker_order: Vec<u8>,
     maker_hash: [u8; 32],
     taker_hash: [u8; 32],
     fill_qty: u64,
@@ -239,9 +231,13 @@ pub fn settle_fill_v2(
     require!(ctx.accounts.market.is_tradable(now), ErrorV2::MarketNotTradable);
     require!(fill_qty > 0, ErrorV2::InvalidQuantity);
 
-    // 1. Parse + hash-check both signed payloads.
-    let maker = OrderPayloadV2::parse(&maker_order).ok_or(ErrorV2::BadOrderPayload)?;
-    let taker = OrderPayloadV2::parse(&taker_order).ok_or(ErrorV2::BadOrderPayload)?;
+    // 1. Pull both signed order payloads out of their (already executed)
+    //    ed25519 verification instructions and bind them to the hash args
+    //    that seed the fill-state PDAs.
+    let (maker_signer, maker_order) =
+        extract_ed25519_signed(&ctx.accounts.instructions_sysvar, maker_sig_ix_index)?;
+    let (taker_signer, taker_order) =
+        extract_ed25519_signed(&ctx.accounts.instructions_sysvar, taker_sig_ix_index)?;
     require!(
         OrderPayloadV2::hash(&maker_order) == maker_hash,
         ErrorV2::BadOrderPayload
@@ -251,6 +247,12 @@ pub fn settle_fill_v2(
         ErrorV2::BadOrderPayload
     );
     require!(maker_hash != taker_hash, ErrorV2::IncompatibleOrders);
+
+    // 2. Parse + validate. The payload's maker MUST be the ed25519 signer.
+    let maker = OrderPayloadV2::parse(&maker_order).ok_or(ErrorV2::BadOrderPayload)?;
+    let taker = OrderPayloadV2::parse(&taker_order).ok_or(ErrorV2::BadOrderPayload)?;
+    require_keys_eq!(maker.maker, maker_signer, ErrorV2::OrderMakerMismatch);
+    require_keys_eq!(taker.maker, taker_signer, ErrorV2::OrderMakerMismatch);
     require!(maker.maker != taker.maker, ErrorV2::SelfTrade);
 
     validate_order(&maker, &market_key, now)?;
@@ -260,20 +262,6 @@ pub fn settle_fill_v2(
             && taker.outcome_index < ctx.accounts.market.num_outcomes,
         ErrorV2::InvalidOutcome
     );
-
-    // 2. Bind the ed25519 signature verifications to these exact payloads.
-    verify_ed25519_binding(
-        &ctx.accounts.instructions_sysvar,
-        maker_sig_ix_index,
-        &maker.maker,
-        &maker_order,
-    )?;
-    verify_ed25519_binding(
-        &ctx.accounts.instructions_sysvar,
-        taker_sig_ix_index,
-        &taker.maker,
-        &taker_order,
-    )?;
 
     // 3. Overfill/replay/cancel guards (canonical per-order fill state).
     init_or_check_fill_state(

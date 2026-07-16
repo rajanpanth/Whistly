@@ -284,6 +284,8 @@ export async function settleMatchOnChain(params: {
     const makerPayload = decodeOrderV2(makerPayloadBytes)!;
     const takerPayload = decodeOrderV2(takerPayloadBytes)!;
 
+    // Positions are created in a separate up-front transaction so the
+    // settlement transaction stays well under the 1232-byte packet limit.
     const setupIxs: TransactionInstruction[] = [
         ...(await ensurePositionIxs(
             operator.publicKey,
@@ -298,10 +300,25 @@ export async function settleMatchOnChain(params: {
             takerPayload.outcomeIndex
         )),
     ];
+    if (setupIxs.length > 0) {
+        const setupTx = new Transaction().add(...setupIxs);
+        setupTx.feePayer = operator.publicKey;
+        const bh = await connection.getLatestBlockhash("confirmed");
+        setupTx.recentBlockhash = bh.blockhash;
+        setupTx.sign(operator);
+        const setupSig = await connection.sendRawTransaction(setupTx.serialize());
+        const setupRes = await connection.confirmTransaction(
+            { signature: setupSig, blockhash: bh.blockhash, lastValidBlockHeight: bh.lastValidBlockHeight },
+            "confirmed"
+        );
+        if (setupRes.value.err) {
+            throw new Error(`init_position_v2 failed: ${JSON.stringify(setupRes.value.err)}`);
+        }
+    }
 
-    // Setup (0..n) → maker sig verify → taker sig verify → settle fill.
-    const makerSigIxIndex = setupIxs.length;
-    const takerSigIxIndex = setupIxs.length + 1;
+    // maker sig verify (0) → taker sig verify (1) → settle fill (2).
+    const makerSigIxIndex = 0;
+    const takerSigIxIndex = 1;
     const settleIx = await buildSettleFillV2Ix({
         operator: operator.publicKey,
         market,
@@ -309,8 +326,6 @@ export async function settleMatchOnChain(params: {
         taker: takerPayload.maker,
         makerOutcomeIndex: makerPayload.outcomeIndex,
         takerOutcomeIndex: takerPayload.outcomeIndex,
-        makerOrder: makerPayloadBytes,
-        takerOrder: takerPayloadBytes,
         makerHash: fromHex(makerRecord.orderHash),
         takerHash: fromHex(takerRecord.orderHash),
         fillQty,
@@ -319,7 +334,6 @@ export async function settleMatchOnChain(params: {
     });
 
     const tx = new Transaction().add(
-        ...setupIxs,
         buildOrderSigVerifyIx(
             makerPayload.maker,
             makerPayloadBytes,

@@ -356,8 +356,6 @@ export async function buildSettleFillV2Ix(params: {
     taker: PublicKey;
     makerOutcomeIndex: number;
     takerOutcomeIndex: number;
-    makerOrder: Uint8Array;
-    takerOrder: Uint8Array;
     makerHash: Uint8Array;
     takerHash: Uint8Array;
     fillQty: bigint | number;
@@ -400,8 +398,6 @@ export async function buildSettleFillV2Ix(params: {
         ],
         data: concat(
             disc,
-            borshVecU8(params.makerOrder),
-            borshVecU8(params.takerOrder),
             Buffer.from(params.makerHash),
             Buffer.from(params.takerHash),
             u64le(params.fillQty),

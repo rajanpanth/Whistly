@@ -213,13 +213,11 @@ pub mod instinctfi {
         v2::sets::burn_set_v2(ctx, sets)
     }
 
-    /// Settle one matched fill on-chain (operator), verifying both parties'
-    /// ed25519-signed order intents via instruction introspection.
-    #[allow(clippy::too_many_arguments)]
+    /// Settle one matched fill on-chain (operator). The two order payloads
+    /// are read from their ed25519 verification pre-instructions via
+    /// sysvar introspection and bound to the hash args.
     pub fn settle_fill_v2(
         ctx: Context<SettleFillV2>,
-        maker_order: Vec<u8>,
-        taker_order: Vec<u8>,
         maker_hash: [u8; 32],
         taker_hash: [u8; 32],
         fill_qty: u64,
@@ -228,8 +226,6 @@ pub mod instinctfi {
     ) -> Result<()> {
         v2::fill::settle_fill_v2(
             ctx,
-            maker_order,
-            taker_order,
             maker_hash,
             taker_hash,
             fill_qty,
