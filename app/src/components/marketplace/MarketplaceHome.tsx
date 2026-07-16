@@ -13,7 +13,7 @@ import CountdownTimer from "./CountdownTimer";
 const QUICK_PICKS = ["Goal", "Cards", "Corners", "Result"];
 
 const PROMO_SLIDES = [
-  { kicker: "World Cup Demo Mode", heading: "Spain are through.", copy: "England–Argentina decides the final tonight (Jul 16, 12:45 am NPT). Live micro-markets open at kickoff, built on Solana devnet for transparent settlement.", cta: "See semi-final markets", href: "/world-cup" },
+  { kicker: "World Cup Demo Mode", heading: "The final is set.", copy: "Spain vs Argentina — Jul 20, 12:45 am NPT. France and England play for third on Jul 19. Live micro-markets open at kickoff, built on Solana devnet.", cta: "See final markets", href: "/world-cup" },
   { kicker: "Builder demo offer", heading: "Practice with devnet SOL.", copy: "Every position, lock, and payout is verifiable on-chain. No real money is involved in demo mode.", cta: "Get devnet SOL", href: "/docs" },
 ] as const;
 
@@ -106,7 +106,7 @@ export default function MarketplaceHome() {
     { title: "Match result", filter: "Match Result", items: markets.filter(m => (m.sport === "Match Result" || m.tags.includes("Match Result")) && m.status !== "ended") },
     { title: "Settled knockout matches", filter: "Settled", items: markets.filter(m => m.status === "ended") },
   ];
-  const spotlightGrid = SPORTS_MARKETS.filter(m => ["sf2-o25", "sf2-btts", "sf2-gap", "final-extra-time"].includes(m.id));
+  const spotlightGrid = SPORTS_MARKETS.filter(m => ["final-o25", "final-btts", "final-extra-time", "third-place-result"].includes(m.id));
 
   return <div className="market-home">
     <div className="market-marketbar"><div><span className="market-marketbar-dot" /> Live market discovery</div><span>Solana devnet · simulated data</span></div>
