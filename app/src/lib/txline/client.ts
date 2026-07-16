@@ -79,7 +79,7 @@ export async function getGuestJwt(forceRenew = false): Promise<string> {
   return data.token;
 }
 
-async function txLineRequest<T>(path: string): Promise<T> {
+async function txLineFetch(path: string): Promise<Response> {
   const doFetch = async (jwt: string) => fetch(`${txLineOrigin()}${path}`, {
     headers: {
       "content-type": "application/json",
@@ -97,7 +97,26 @@ async function txLineRequest<T>(path: string): Promise<T> {
   if (!response.ok) {
     throw new TxLineRequestError(`TxLINE ${path} failed: ${response.status}`, response.status);
   }
-  return response.json() as Promise<T>;
+  return response;
+}
+
+async function txLineRequest<T>(path: string): Promise<T> {
+  return (await txLineFetch(path)).json() as Promise<T>;
+}
+
+async function txLineSequence(path: string): Promise<Array<Record<string, unknown>>> {
+  const response = await txLineFetch(path);
+  const body = await response.text();
+  if (body.trimStart().startsWith("[")) return JSON.parse(body) as Array<Record<string, unknown>>;
+  const entries: Array<Record<string, unknown>> = [];
+  for (const line of body.split(/\r?\n/)) {
+    if (!line.startsWith("data:")) continue;
+    const payload = line.slice(5).trim();
+    if (!payload || payload === "[DONE]") continue;
+    try { entries.push(JSON.parse(payload) as Record<string, unknown>); }
+    catch { /* Ignore malformed keepalive/event lines, not valid score packets. */ }
+  }
+  return entries;
 }
 
 // ── Real API response shapes (docs.yaml) ─────────────────────────────────────
@@ -128,7 +147,7 @@ function adaptFixture(real: RealFixture): TxLineFixture {
     homeTeam: home,
     awayTeam: away,
     competition: real.Competition,
-    status: gameState === 6 ? "FINISHED" : startsInFuture ? "SCHEDULED" : "LIVE",
+    status: normalizeGameState(gameState, startsInFuture),
     clockSeconds: 0,
     homeScore: 0,
     awayScore: 0,
@@ -137,20 +156,53 @@ function adaptFixture(real: RealFixture): TxLineFixture {
   };
 }
 
-/** Sum goals from a SoccerTotalScore object ({H1: {Goals..}, H2: {...}, ...}). */
+function normalizeGameState(state: string | number, startsInFuture = false): TxLineFixture["status"] {
+  if (typeof state === "number") {
+    if ([5, 10, 13].includes(state)) return "FINISHED";
+    if (state === 15) return "ABANDONED";
+    if (state === 16 || state === 17) return "CANCELLED";
+    if (state === 19) return "POSTPONED";
+    if (state === 1 || startsInFuture) return "SCHEDULED";
+    return "LIVE";
+  }
+  const normalized = state.toUpperCase();
+  if (["F", "FET", "FPE", "END", "ENDED", "FINISHED"].includes(normalized)) return "FINISHED";
+  if (["A", "ABANDONED"].includes(normalized)) return "ABANDONED";
+  if (["C", "TXCC", "TXCS", "CANCELLED", "CANCELED"].includes(normalized)) return "CANCELLED";
+  if (["P", "POSTPONED"].includes(normalized)) return "POSTPONED";
+  if (["NS", "SCHEDULED", "NOT_STARTED"].includes(normalized) || startsInFuture) return "SCHEDULED";
+  return "LIVE";
+}
+
+/** Read goals without double-counting cumulative Total/HT/ETTotal buckets. */
 function sumGoals(totalScore: unknown): number {
   if (!totalScore || typeof totalScore !== "object") return 0;
-  let goals = 0;
-  for (const period of Object.values(totalScore as Record<string, unknown>)) {
-    if (period && typeof period === "object" && typeof (period as { Goals?: unknown }).Goals === "number") {
-      goals += (period as { Goals: number }).Goals;
-    }
-  }
-  return goals;
+  const periods = totalScore as Record<string, unknown>;
+  const goals = (key: string) => {
+    const period = periods[key];
+    return period && typeof period === "object" && typeof (period as { Goals?: unknown }).Goals === "number"
+      ? (period as { Goals: number }).Goals
+      : null;
+  };
+  const total = goals("Total");
+  if (total !== null) return total;
+  const regulationAndExtraTime = ["H1", "H2", "ET1", "ET2"].map(goals).filter((value): value is number => value !== null);
+  if (regulationAndExtraTime.length) return regulationAndExtraTime.reduce((sum, value) => sum + value, 0);
+  return goals("HT") ?? goals("ETTotal") ?? 0;
 }
 
 /** Best-effort extraction of participant goal totals from a scores payload entry. */
 function extractScores(entry: Record<string, unknown>): { p1Goals: number; p2Goals: number } | null {
+  let rawStats = entry.stats ?? entry.Stats;
+  if (typeof rawStats === "string" && rawStats.startsWith("{")) {
+    try { rawStats = JSON.parse(rawStats); } catch { rawStats = null; }
+  }
+  if (rawStats && typeof rawStats === "object") {
+    const stats = rawStats as Record<string, unknown>;
+    if (typeof stats["1"] === "number" && typeof stats["2"] === "number") {
+      return { p1Goals: stats["1"], p2Goals: stats["2"] };
+    }
+  }
   const queue: unknown[] = [entry];
   while (queue.length > 0) {
     const node = queue.shift();
@@ -171,6 +223,54 @@ function extractScores(entry: Record<string, unknown>): { p1Goals: number; p2Goa
   return null;
 }
 
+function entryClockSeconds(entry: Record<string, unknown>): number {
+  const rawClock = entry.clock ?? entry.Clock;
+  const clock = rawClock && typeof rawClock === "object" ? rawClock as { seconds?: unknown; Seconds?: unknown } : null;
+  if (typeof clock?.seconds === "number") return clock.seconds;
+  if (typeof clock?.Seconds === "number") return clock.Seconds;
+  const rawSoccer = entry.dataSoccer ?? entry.DataSoccer ?? entry.Data;
+  const soccer = rawSoccer && typeof rawSoccer === "object" ? rawSoccer as Record<string, unknown> : null;
+  const minutes = soccer?.Minutes ?? soccer?.minutes;
+  return typeof minutes === "number" ? minutes * 60 : 0;
+}
+
+function entryTimestamp(entry: Record<string, unknown>): number {
+  const candidate = entry.ts ?? entry.Ts;
+  const raw = typeof candidate === "number" ? candidate : Date.now();
+  return raw < 1_000_000_000_000 ? raw * 1_000 : raw;
+}
+
+function goalEvents(entries: Array<Record<string, unknown>>, participant1IsHome: boolean): TxLineScore["events"] {
+  let previous: { home: number; away: number } | null = null;
+  const events: TxLineScore["events"] = [];
+  for (const [index, entry] of entries.entries()) {
+    const scores = extractScores(entry);
+    if (!scores) continue;
+    const home = participant1IsHome ? scores.p1Goals : scores.p2Goals;
+    const away = participant1IsHome ? scores.p2Goals : scores.p1Goals;
+    const rawSoccer = entry.dataSoccer ?? entry.DataSoccer ?? entry.Data;
+    const soccer = rawSoccer && typeof rawSoccer === "object" ? rawSoccer as Record<string, unknown> : {};
+    const homeIncreased = previous ? home > previous.home : false;
+    const awayIncreased = previous ? away > previous.away : false;
+    // TxLINE can flag possible/disallowed goal actions. A score transition is
+    // the authoritative consumer signal, so only emit a goal when totals move.
+    if (homeIncreased || awayIncreased) {
+      const participant = Number(soccer.Participant ?? entry.Participant ?? 0);
+      const team = homeIncreased ? "HOME" : awayIncreased ? "AWAY" :
+        participant ? ((participant === 1) === participant1IsHome ? "HOME" : "AWAY") : "HOME";
+      events.push({
+        id: String(entry.id ?? entry.Id ?? entry.seq ?? entry.Seq ?? `goal-${index}`),
+        type: "GOAL",
+        clockSeconds: entryClockSeconds(entry),
+        team,
+        scoreAfter: `${home}-${away}`,
+      });
+    }
+    previous = { home, away };
+  }
+  return events.filter((event, index, all) => index === 0 || event.id !== all[index - 1].id);
+}
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 export async function fetchTxLineFixtures(): Promise<{ fixtures: TxLineFixture[]; source: TxLineDataSource }> {
@@ -189,6 +289,19 @@ export async function fetchTxLineFixtures(): Promise<{ fixtures: TxLineFixture[]
   throw new TxLineNotConfiguredError(txLineMissingEnvVars());
 }
 
+/** Completed fixtures from TxLINE's real snapshot window for replay discovery. */
+export async function fetchTxLineReplayFixtures(): Promise<{ fixtures: TxLineFixture[]; source: "txline" }> {
+  if (!isTxLineConfigured()) throw new TxLineNotConfiguredError(txLineMissingEnvVars());
+  const startEpochDay = Math.floor((Date.now() - 30 * 86_400_000) / 86_400_000);
+  const real = await txLineRequest<RealFixture[]>(`/api/fixtures/snapshot?startEpochDay=${startEpochDay}`);
+  const finishedBefore = Date.now() - 4 * 60 * 60 * 1_000;
+  const fixtures = real
+    .filter((item) => item.StartTime < finishedBefore)
+    .map((item) => ({ ...adaptFixture(item), status: "FINISHED" as const }))
+    .sort((a, b) => (b.startTimeMs ?? 0) - (a.startTimeMs ?? 0));
+  return { fixtures, source: "txline" };
+}
+
 export async function fetchTxLineScore(fixtureId: string): Promise<{ score: TxLineScore; source: TxLineDataSource }> {
   if (isTxLineConfigured()) {
     const entries = await txLineRequest<Array<Record<string, unknown>>>(`/api/scores/snapshot/${encodeURIComponent(fixtureId)}`);
@@ -200,17 +313,18 @@ export async function fetchTxLineScore(fixtureId: string): Promise<{ score: TxLi
     if (!participantScores) {
       throw new TxLineRequestError(`Could not parse TxLINE score payload for fixture ${fixtureId}`);
     }
-    const participant1IsHome = latest.participant1IsHome !== false;
-    const gameState = typeof latest.gameState === "string" ? latest.gameState : "";
+    const participant1IsHome = (latest.participant1IsHome ?? latest.Participant1IsHome) !== false;
+    const rawGameState = latest.gameState ?? latest.GameState;
+    const gameState = typeof rawGameState === "string" || typeof rawGameState === "number" ? rawGameState : "";
     return {
       score: {
         fixtureId,
-        clockSeconds: 0,
+        clockSeconds: entryClockSeconds(latest),
         homeScore: participant1IsHome ? participantScores.p1Goals : participantScores.p2Goals,
         awayScore: participant1IsHome ? participantScores.p2Goals : participantScores.p1Goals,
-        status: gameState === "END" || gameState.startsWith("F") ? "FINISHED" : "LIVE",
-        events: [],
-        updatedAt: new Date(typeof latest.ts === "number" ? latest.ts : Date.now()).toISOString(),
+        status: normalizeGameState(gameState),
+        events: goalEvents(entries, participant1IsHome),
+        updatedAt: new Date(entryTimestamp(latest)).toISOString(),
       },
       source: "txline",
     };
@@ -219,6 +333,64 @@ export async function fetchTxLineScore(fixtureId: string): Promise<{ score: TxLi
     return { score: getMockScore(fixtureId), source: "mock" };
   }
   throw new TxLineNotConfiguredError(txLineMissingEnvVars());
+}
+
+export type TxLineReplayPoint = {
+  sequence: number;
+  clockSeconds: number;
+  homeScore: number;
+  awayScore: number;
+  status: TxLineFixture["status"];
+  action: string;
+  isGoal: boolean;
+  updatedAt: string;
+};
+
+/** Provider-backed historical replay. This deliberately has no mock fallback. */
+export async function fetchTxLineHistoricalScores(fixtureId: string): Promise<{
+  fixtureId: string;
+  points: TxLineReplayPoint[];
+  source: "txline";
+}> {
+  if (!isTxLineConfigured()) throw new TxLineNotConfiguredError(txLineMissingEnvVars());
+  const entries = await txLineSequence(
+    `/api/scores/historical/${encodeURIComponent(fixtureId)}`
+  );
+  let previousTotal = 0;
+  let previousClock = 0;
+  const points = (Array.isArray(entries) ? entries : [])
+    .sort((a, b) => Number(a.seq ?? a.Seq ?? a.ts ?? a.Ts ?? 0) - Number(b.seq ?? b.Seq ?? b.ts ?? b.Ts ?? 0))
+    .flatMap((entry, index): TxLineReplayPoint[] => {
+      const scores = extractScores(entry);
+      if (!scores) return [];
+      const participant1IsHome = (entry.participant1IsHome ?? entry.Participant1IsHome) !== false;
+      const homeScore = participant1IsHome ? scores.p1Goals : scores.p2Goals;
+      const awayScore = participant1IsHome ? scores.p2Goals : scores.p1Goals;
+      const total = homeScore + awayScore;
+      const rawSoccerData = entry.dataSoccer ?? entry.DataSoccer ?? entry.Data;
+      const soccerData = rawSoccerData && typeof rawSoccerData === "object"
+        ? rawSoccerData as Record<string, unknown>
+        : {};
+      const minutes = typeof soccerData.Minutes === "number" ? soccerData.Minutes : 0;
+      const gameState = String(entry.gameState ?? entry.GameState ?? "");
+      const action = String(entry.action ?? entry.Action ?? soccerData.Action ?? soccerData.Type ?? "Score update");
+      const reportedClock = entryClockSeconds(entry) || minutes * 60;
+      if (reportedClock > 0) previousClock = reportedClock;
+      const point: TxLineReplayPoint = {
+        sequence: Number(entry.seq ?? entry.Seq ?? index),
+        clockSeconds: reportedClock || previousClock,
+        homeScore,
+        awayScore,
+        status: normalizeGameState(gameState),
+        action,
+        isGoal: total > previousTotal,
+        updatedAt: new Date(entryTimestamp(entry)).toISOString(),
+      };
+      previousTotal = total;
+      return [point];
+    })
+    .filter((point, index, all) => index === 0 || point.sequence !== all[index - 1].sequence);
+  return { fixtureId, points, source: "txline" };
 }
 
 /** Live connectivity probe against the real TxLINE API (never mocks). */

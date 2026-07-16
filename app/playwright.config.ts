@@ -31,6 +31,11 @@ export default defineConfig({
     baseURL: process.env.PW_BASE_URL || "http://localhost:3005",
     timezoneId: "UTC",
     locale: "en-US",
+    // CI normally uses Playwright's headless shell. Local environments can
+    // point at the bundled full Chromium when that smaller shell is absent.
+    launchOptions: process.env.PW_CHROMIUM_EXECUTABLE
+      ? { executablePath: process.env.PW_CHROMIUM_EXECUTABLE }
+      : undefined,
   },
   // Reuse an already-running dev server at PW_BASE_URL. Never spawn a second
   // `next dev` against the same .next directory — two dev servers sharing

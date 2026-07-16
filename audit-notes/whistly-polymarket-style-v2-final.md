@@ -169,8 +169,9 @@ stack-safety. Vault backing invariant enforced on every mint/burn/redeem
 
 ## Remaining limitations
 
-1. `/live`, `/portfolio`, `/activity` still render the V1 pages (trading nav
-   links to them); a full V2 restyle of these three is the main follow-up.
+1. `/live`, `/portfolio`, and `/activity` have now been migrated into the V2
+   trading route group and restyled; the new Matchday fan product is documented
+   separately in `whistly-consumer-fan-submission.md`.
 2. Anchor IDL / `anchor test` unavailable in this toolchain — devnet
    assertion suite substitutes.
 3. Local order store is in-memory (resets on restart) until Supabase env is

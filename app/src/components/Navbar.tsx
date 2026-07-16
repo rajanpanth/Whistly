@@ -13,7 +13,7 @@ import WalletConnectModal from "./WalletConnectModal";
 // V2 trading routes render their own header (app/(trading)); suppress the
 // global Navbar there. The homepage `/` is intentionally excluded so its
 // chrome stays frozen.
-const TRADING_ROUTE_RE = /^\/(markets|market\/|event\/|positions|orders)/;
+const TRADING_ROUTE_RE = /^\/(markets|market\/|event\/|live|portfolio|positions|orders|activity|matchday|rooms\/|fan-leaderboard|fan-profile|recap\/)/;
 
 export function Navbar() {
   const pathname = usePathname();

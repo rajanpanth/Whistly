@@ -1,6 +1,24 @@
 # Whistly V2 Progress Tracker
 
-Updated: 2026-07-16 (session 1)
+Updated: 2026-07-16 (session 2 — Consumer & Fan Experiences)
+
+## Matchday hackathon product (session 2)
+
+- [x] Built the new `/matchday` fan product specifically for the TxODDS Consumer and Fan Experiences track.
+- [x] Added real TxLINE discovery, 3-second live refresh, clock/goal/state normalization, historical replay, and explicit fail-closed states.
+- [x] Added deterministic 5/15/45-minute goal challenges, unique picks, lock boundaries, scoring/streaks, and interruption voiding.
+- [x] Added private rooms, invite codes, leaderboards, reactions, profiles, and post-match recaps.
+- [x] Added durable Supabase schema, RLS, atomic resolver RPC, rate limits, protected sync endpoint, and production storage guard.
+- [x] Added isolated desktop/mobile fan UI without changing `/`.
+- [x] Added unit/integration tests and four Matchday visual baselines.
+- [x] Added submission brief, five-minute demo script, business model, TxLINE feedback, and deployment checklist in `whistly-consumer-fan-submission.md`.
+
+### Matchday external blockers
+
+- Apply `app/supabase-fan-matchday.sql` with production Supabase access.
+- Deploy to the production domain with Matchday environment variables.
+- Record/upload the required demo video during a live fixture or with explicitly labelled mock mechanics plus real historical replay.
+- Push/merge the committed branch so the public repository contains the submission.
 
 ## Completed
 

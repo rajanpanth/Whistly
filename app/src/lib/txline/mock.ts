@@ -3,7 +3,7 @@ export interface TxLineFixture {
   homeTeam: string;
   awayTeam: string;
   competition: string;
-  status: "LIVE" | "SCHEDULED" | "FINISHED";
+  status: "LIVE" | "SCHEDULED" | "FINISHED" | "POSTPONED" | "ABANDONED" | "CANCELLED";
   clockSeconds: number;
   homeScore: number;
   awayScore: number;

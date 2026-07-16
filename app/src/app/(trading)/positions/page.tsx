@@ -11,7 +11,7 @@ const EXPLORER = (sig: string) => `https://explorer.solana.com/tx/${sig}?cluster
 export default function PositionsPage() {
     const { publicKey, signTransaction } = useWallet();
     const wallet = publicKey?.toBase58() ?? null;
-    const { positions, balance, refresh } = usePositions(wallet);
+    const { positions, balance, loading, refresh } = usePositions(wallet);
     const { markets } = useMarkets();
     const { orders } = useOrders(wallet);
     const [redeemMsg, setRedeemMsg] = useState<string | null>(null);
@@ -21,14 +21,18 @@ export default function PositionsPage() {
     }
 
     const marketById = new Map(markets.map((m) => [m.address, m]));
-    const openOrderCollateral = orders
-        .filter((o) => o.status === "open" || o.status === "partially_filled")
+    const liveOrders = orders.filter(
+        (o) => o.status === "open" || o.status === "partially_filled"
+    );
+    const openOrderCollateral = liveOrders
+        .filter((o) => o.side === "BUY")
         .reduce((s, o) => s + o.lockedAmount, 0);
 
     // Executable value = shares × best bid for that outcome.
     let portfolioValue = 0;
     let unrealized = 0;
     let realized = 0;
+    let claimableValue = 0;
     const rows = positions
         .filter((p) => p.shares > 0 || p.redeemedShares > 0)
         .map((p) => {
@@ -47,7 +51,33 @@ export default function PositionsPage() {
             realized += p.redeemedLamports + p.proceedsLamports - (p.costLamports - (p.shares > 0 ? p.costLamports : 0));
             const settled = m?.status === 3 || m?.status === 4;
             const isWinner = m?.status === 3 && m?.winningOutcome === p.outcomeIndex;
-            return { p, m, bestBid, value, avgEntryBps, pnl, settled, isWinner };
+            const lockedShares = liveOrders
+                .filter(
+                    (o) =>
+                        o.side === "SELL" &&
+                        o.market === p.market &&
+                        o.outcomeIndex === p.outcomeIndex
+                )
+                .reduce((sum, o) => sum + Math.max(0, o.quantity - o.filledQuantity), 0);
+            const availableShares = Math.max(0, p.shares - lockedShares);
+            const redeemPerShare = isWinner
+                ? SET_COST
+                : m?.status === 4 && m.numOutcomes > 0
+                  ? Math.floor(SET_COST / m.numOutcomes)
+                  : 0;
+            claimableValue += p.shares * redeemPerShare;
+            return {
+                p,
+                m,
+                bestBid,
+                value,
+                avgEntryBps,
+                pnl,
+                settled,
+                isWinner,
+                lockedShares,
+                availableShares,
+            };
         });
 
     async function handleRedeem(market: string, outcome: number) {
@@ -68,18 +98,28 @@ export default function PositionsPage() {
                 Portfolio
             </h1>
 
+            <div className="wt-pills" aria-label="Portfolio sections">
+                <Link className="wt-pill active" href="/portfolio">Positions</Link>
+                <Link className="wt-pill" href="/orders">Open orders</Link>
+                <Link className="wt-pill" href="/activity?mine=1">History</Link>
+            </div>
+
             <div className="wt-stats">
                 <Stat label="Available collateral" value={`◎ ${balance ? fmtSol(balance.available) : "0.000"}`} />
                 <Stat label="Positions value" value={`◎ ${fmtSol(portfolioValue)}`} />
                 <Stat label="Locked in orders" value={`◎ ${fmtSol(openOrderCollateral)}`} />
-                <Stat label="Deposited (lifetime)" value={`◎ ${balance ? fmtSol(balance.totalDeposited) : "0.000"}`} />
+                <Stat label="Unrealized P&amp;L" value={`${unrealized >= 0 ? "+" : "−"}◎ ${fmtSol(Math.abs(unrealized))}`} />
+                <Stat label="Realized P&amp;L" value={`${realized >= 0 ? "+" : "−"}◎ ${fmtSol(Math.abs(realized))}`} />
+                <Stat label="Claimable" value={`◎ ${fmtSol(claimableValue)}`} />
             </div>
 
             {redeemMsg && <div className="wt-panel" style={{ color: "var(--wt-accent)" }}>{redeemMsg}</div>}
 
             <div className="wt-panel">
                 <p className="wt-panel-title">Positions</p>
-                {rows.length === 0 ? (
+                {loading ? (
+                    <div className="wt-empty">Loading on-chain positions…</div>
+                ) : rows.length === 0 ? (
                     <div className="wt-empty">No positions yet. Buy shares from a market to get started.</div>
                 ) : (
                     <table className="wt-table">
@@ -96,7 +136,7 @@ export default function PositionsPage() {
                             </tr>
                         </thead>
                         <tbody>
-                            {rows.map(({ p, m, bestBid, value, avgEntryBps, pnl, settled, isWinner }) => (
+                            {rows.map(({ p, m, bestBid, value, avgEntryBps, pnl, settled, isWinner, lockedShares, availableShares }) => (
                                 <tr key={p.address}>
                                     <td>
                                         {m ? (
@@ -108,7 +148,10 @@ export default function PositionsPage() {
                                         )}
                                     </td>
                                     <td>{m?.outcomes[p.outcomeIndex] ?? `#${p.outcomeIndex}`}</td>
-                                    <td className="wt-num-right">{p.shares}</td>
+                                    <td className="wt-num-right">
+                                        <span>{availableShares}</span>
+                                        {lockedShares > 0 && <small className="wt-muted-block">{lockedShares} locked</small>}
+                                    </td>
                                     <td className="wt-num-right">{bpsToPct1(avgEntryBps)}</td>
                                     <td className="wt-num-right">{bestBid !== null ? bpsToPct1(bestBid) : "—"}</td>
                                     <td className="wt-num-right">◎ {fmtSol(value)}</td>
@@ -124,8 +167,8 @@ export default function PositionsPage() {
                                             >
                                                 {isWinner || m?.status === 4 ? "Redeem" : "Redeem (0)"}
                                             </button>
-                                        ) : m?.status === 0 && p.shares > 0 ? (
-                                            <Link href={`/market/${p.market}`} className="wt-btn" style={{ padding: "6px 12px" }}>
+                                        ) : m?.status === 0 && availableShares > 0 ? (
+                                            <Link href={`/market/${p.market}?side=SELL&outcome=${p.outcomeIndex}`} className="wt-btn" style={{ padding: "6px 12px" }}>
                                                 Sell
                                             </Link>
                                         ) : null}

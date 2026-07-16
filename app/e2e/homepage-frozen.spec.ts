@@ -34,7 +34,10 @@ async function settle(page: Page) {
   // renders its deterministic fallback/empty state — we are guarding
   // the homepage DESIGN, not its live data.
   await page.route("**/api/**", (route) => route.abort());
-  await page.goto("/", { waitUntil: "networkidle" });
+  // Next dev keeps an HMR connection open, so `networkidle` may never fire.
+  // DOM readiness + a visible main landmark is the stable layout boundary.
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await page.locator("main").waitFor({ state: "visible" });
   // Let fonts/images and the initial data pass finish.
   await page.waitForTimeout(1500);
 }

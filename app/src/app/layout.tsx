@@ -11,6 +11,7 @@ import AuroraBackground from "@/components/AuroraBackground";
 import AppProviders from "@/components/AppProviders";
 import { Toaster } from "react-hot-toast";
 import ConditionalFooter from "@/components/ConditionalFooter";
+import ConditionalPageShell from "@/components/ConditionalPageShell";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-body" });
 const spaceGrotesk = Space_Grotesk({
@@ -100,11 +101,11 @@ export default function RootLayout({
             <Navbar />
           </Suspense>
           <ErrorBoundary>
-            <main className="mx-auto w-full max-w-[1440px] px-4 py-5 sm:px-6 lg:px-12 lg:py-6 mobile-content-pad">
+            <ConditionalPageShell>
               <PageTransition>
                 {children}
               </PageTransition>
-            </main>
+            </ConditionalPageShell>
           </ErrorBoundary>
           <ConditionalFooter />
           <InstallPrompt />
