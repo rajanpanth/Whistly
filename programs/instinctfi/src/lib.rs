@@ -5,6 +5,13 @@ pub mod errors;
 pub mod instructions;
 pub mod events;
 
+// V2 CLOB-style share-trading protocol (additive — V1 untouched).
+pub mod state_v2;
+pub mod errors_v2;
+pub mod events_v2;
+
+use instructions::v2;
+use instructions::v2::*;
 use instructions::*;
 
 // Deployed to Solana devnet on 2026-03-01
@@ -128,5 +135,135 @@ pub mod instinctfi {
         new_admin: Pubkey,
     ) -> Result<()> {
         instructions::update_platform_config::handler(ctx, paused, new_admin)
+    }
+
+    // ═══════════════════════ V2 — CLOB share trading ═══════════════════════
+    // Additive protocol: real outcome shares, off-chain matching, on-chain
+    // fill settlement, redemption. V1 instructions above are untouched.
+
+    /// One-time V2 config init (admin gated to the published initial admin).
+    pub fn init_config_v2(
+        ctx: Context<InitConfigV2>,
+        operator: Pubkey,
+        fee_bps: u16,
+    ) -> Result<()> {
+        v2::admin::init_config_v2(ctx, operator, fee_bps)
+    }
+
+    /// Rotate admin/operator, change fee, pause/unpause V2 trading.
+    pub fn update_config_v2(
+        ctx: Context<UpdateConfigV2>,
+        new_admin: Option<Pubkey>,
+        new_operator: Option<Pubkey>,
+        new_fee_bps: Option<u16>,
+        paused: Option<bool>,
+    ) -> Result<()> {
+        v2::admin::update_config_v2(ctx, new_admin, new_operator, new_fee_bps, paused)
+    }
+
+    /// Create a V2 share market (binary / three-way / multi-outcome).
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_market_v2(
+        ctx: Context<CreateMarketV2>,
+        title: String,
+        outcomes: Vec<String>,
+        market_type: u8,
+        fixture_id: u64,
+        resolution_source: u8,
+        close_ts: i64,
+    ) -> Result<()> {
+        v2::admin::create_market_v2(
+            ctx, title, outcomes, market_type, fixture_id, resolution_source, close_ts,
+        )
+    }
+
+    /// Pause / unpause / close a V2 market (admin).
+    pub fn set_market_status_v2(ctx: Context<SetMarketStatusV2>, status: u8) -> Result<()> {
+        v2::admin::set_market_status_v2(ctx, status)
+    }
+
+    /// Deposit lamports into the caller's V2 trading balance.
+    pub fn deposit_v2(ctx: Context<DepositV2>, amount: u64) -> Result<()> {
+        v2::funds::deposit_v2(ctx, amount)
+    }
+
+    /// Withdraw available lamports from the caller's V2 trading balance.
+    pub fn withdraw_v2(ctx: Context<WithdrawV2>, amount: u64) -> Result<()> {
+        v2::funds::withdraw_v2(ctx, amount)
+    }
+
+    /// Create a position account for (market, owner, outcome).
+    pub fn init_position_v2(ctx: Context<InitPositionV2>, outcome_index: u8) -> Result<()> {
+        v2::sets::init_position_v2(ctx, outcome_index)
+    }
+
+    /// Mint complete sets: pay N × SET_COST, receive N shares of every outcome.
+    pub fn mint_set_v2<'info>(
+        ctx: Context<'_, '_, 'info, 'info, MintBurnSetV2<'info>>,
+        sets: u64,
+    ) -> Result<()> {
+        v2::sets::mint_set_v2(ctx, sets)
+    }
+
+    /// Burn complete sets back into collateral.
+    pub fn burn_set_v2<'info>(
+        ctx: Context<'_, '_, 'info, 'info, MintBurnSetV2<'info>>,
+        sets: u64,
+    ) -> Result<()> {
+        v2::sets::burn_set_v2(ctx, sets)
+    }
+
+    /// Settle one matched fill on-chain (operator), verifying both parties'
+    /// ed25519-signed order intents via instruction introspection.
+    #[allow(clippy::too_many_arguments)]
+    pub fn settle_fill_v2(
+        ctx: Context<SettleFillV2>,
+        maker_order: Vec<u8>,
+        taker_order: Vec<u8>,
+        maker_hash: [u8; 32],
+        taker_hash: [u8; 32],
+        fill_qty: u64,
+        maker_sig_ix_index: u8,
+        taker_sig_ix_index: u8,
+    ) -> Result<()> {
+        v2::fill::settle_fill_v2(
+            ctx,
+            maker_order,
+            taker_order,
+            maker_hash,
+            taker_hash,
+            fill_qty,
+            maker_sig_ix_index,
+            taker_sig_ix_index,
+        )
+    }
+
+    /// Trustless on-chain hard-cancel of a signed order by its maker.
+    pub fn cancel_order_v2(
+        ctx: Context<CancelOrderV2>,
+        order: Vec<u8>,
+        order_hash: [u8; 32],
+    ) -> Result<()> {
+        v2::fill::cancel_order_v2(ctx, order, order_hash)
+    }
+
+    /// Declare the winning outcome of a V2 market (admin).
+    pub fn settle_market_v2(ctx: Context<ResolveMarketV2>, winning_outcome: u8) -> Result<()> {
+        v2::resolve::settle_market_v2(ctx, winning_outcome)
+    }
+
+    /// Void a V2 market — all shares refund at SET_COST / num_outcomes.
+    pub fn void_market_v2(ctx: Context<ResolveMarketV2>) -> Result<()> {
+        v2::resolve::void_market_v2(ctx)
+    }
+
+    /// Redeem a position after settlement or void.
+    pub fn redeem_v2(ctx: Context<RedeemV2>) -> Result<()> {
+        v2::resolve::redeem_v2(ctx)
+    }
+
+    /// Withdraw accrued trading fees from a market vault (admin).
+    pub fn withdraw_fees_v2(ctx: Context<WithdrawFeesV2>) -> Result<()> {
+        v2::resolve::withdraw_fees_v2(ctx)
     }
 }

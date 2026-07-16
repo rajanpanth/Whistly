@@ -1,3 +1,5 @@
+pub mod v2;
+
 pub mod initialize_user;
 pub mod create_poll;
 pub mod edit_poll;

@@ -1,0 +1,17 @@
+main.mx-auto
+  div
+    div.market-home
+      div.market-marketbar
+        div
+        span
+      nav.market-sport-tabs
+        button.active
+        button
+        button
+        button
+        button
+        button
+        button
+      div.market-page-layout
+        div.market-main-column
+        aside.market-sidebar

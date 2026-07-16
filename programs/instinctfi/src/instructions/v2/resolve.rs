@@ -1,0 +1,209 @@
+use anchor_lang::prelude::*;
+
+use crate::errors_v2::ErrorV2;
+use crate::events_v2::*;
+use crate::state_v2::*;
+
+// ─── settle_market_v2 / void_market_v2 ──────────────────────────────────────
+
+#[derive(Accounts)]
+pub struct ResolveMarketV2<'info> {
+    pub admin: Signer<'info>,
+    #[account(
+        seeds = [b"config_v2"],
+        bump = config.bump,
+        constraint = config.admin == admin.key() @ ErrorV2::UnauthorizedAdmin
+    )]
+    pub config: Account<'info, ConfigV2>,
+    #[account(
+        mut,
+        seeds = [b"market_v2", market.market_id.to_le_bytes().as_ref()],
+        bump = market.bump
+    )]
+    pub market: Account<'info, MarketV2>,
+}
+
+pub fn settle_market_v2(ctx: Context<ResolveMarketV2>, winning_outcome: u8) -> Result<()> {
+    let clock = Clock::get()?;
+    let market = &mut ctx.accounts.market;
+    require!(
+        market.status == MarketV2::STATUS_OPEN
+            || market.status == MarketV2::STATUS_PAUSED
+            || market.status == MarketV2::STATUS_CLOSED,
+        ErrorV2::MarketAlreadyResolved
+    );
+    // Settling before close is only allowed once the close time passed
+    // (e.g. goal-window boundary) OR the market was explicitly closed.
+    require!(
+        market.status == MarketV2::STATUS_CLOSED || clock.unix_timestamp >= market.close_ts,
+        ErrorV2::MarketNotClosed
+    );
+    require!(winning_outcome < market.num_outcomes, ErrorV2::InvalidOutcome);
+
+    market.status = MarketV2::STATUS_SETTLED;
+    market.winning_outcome = winning_outcome;
+
+    emit!(MarketResolvedV2 {
+        market: market.key(),
+        winning_outcome,
+    });
+    Ok(())
+}
+
+pub fn void_market_v2(ctx: Context<ResolveMarketV2>) -> Result<()> {
+    let market = &mut ctx.accounts.market;
+    require!(
+        market.status == MarketV2::STATUS_OPEN
+            || market.status == MarketV2::STATUS_PAUSED
+            || market.status == MarketV2::STATUS_CLOSED,
+        ErrorV2::MarketAlreadyResolved
+    );
+    market.status = MarketV2::STATUS_VOID;
+    market.winning_outcome = MarketV2::WINNING_UNSET;
+
+    emit!(MarketResolvedV2 {
+        market: market.key(),
+        winning_outcome: MarketV2::WINNING_UNSET,
+    });
+    Ok(())
+}
+
+// ─── redeem_v2 ──────────────────────────────────────────────────────────────
+// Winning shares pay SET_COST each; losing shares pay 0 (still marked
+// redeemed so the position is terminal). On VOID every outcome's shares
+// pay SET_COST / num_outcomes (floor — dust favors the vault).
+
+#[derive(Accounts)]
+pub struct RedeemV2<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [b"market_v2", market.market_id.to_le_bytes().as_ref()],
+        bump = market.bump
+    )]
+    pub market: Account<'info, MarketV2>,
+    #[account(
+        mut,
+        seeds = [b"vault_v2", market.key().as_ref()],
+        bump = market.vault_bump
+    )]
+    pub vault: Account<'info, VaultV2>,
+    #[account(
+        mut,
+        seeds = [
+            b"position_v2",
+            market.key().as_ref(),
+            owner.key().as_ref(),
+            &[position.outcome_index]
+        ],
+        bump = position.bump,
+        constraint = position.owner == owner.key() @ ErrorV2::FillStateMismatch,
+        constraint = position.market == market.key() @ ErrorV2::FillStateMismatch
+    )]
+    pub position: Account<'info, PositionV2>,
+}
+
+pub fn redeem_v2(ctx: Context<RedeemV2>) -> Result<()> {
+    let market = &ctx.accounts.market;
+    let voided = market.status == MarketV2::STATUS_VOID;
+    require!(
+        market.status == MarketV2::STATUS_SETTLED || voided,
+        ErrorV2::MarketNotSettled
+    );
+
+    let position = &mut ctx.accounts.position;
+    let shares = position.shares;
+    require!(shares > 0, ErrorV2::NothingToRedeem);
+
+    let payout_per_share = if voided {
+        SET_COST / market.num_outcomes as u64
+    } else if position.outcome_index == market.winning_outcome {
+        SET_COST
+    } else {
+        0
+    };
+    let payout = payout_per_share
+        .checked_mul(shares)
+        .ok_or(ErrorV2::MathOverflow)?;
+
+    // Double-redemption defense: shares zero out atomically here; a second
+    // call hits NothingToRedeem.
+    position.shares = 0;
+    position.redeemed_shares = position
+        .redeemed_shares
+        .checked_add(shares)
+        .ok_or(ErrorV2::MathOverflow)?;
+    position.redeemed_lamports = position
+        .redeemed_lamports
+        .checked_add(payout)
+        .ok_or(ErrorV2::MathOverflow)?;
+
+    if payout > 0 {
+        let vault = &mut ctx.accounts.vault;
+        require!(vault.backing >= payout, ErrorV2::VaultInvariant);
+        vault.backing -= payout;
+        **vault.to_account_info().try_borrow_mut_lamports()? -= payout;
+        **ctx.accounts.owner.to_account_info().try_borrow_mut_lamports()? += payout;
+    }
+
+    emit!(RedeemedV2 {
+        market: market.key(),
+        owner: position.owner,
+        outcome_index: position.outcome_index,
+        shares,
+        payout_lamports: payout,
+        voided,
+    });
+    Ok(())
+}
+
+// ─── withdraw_fees_v2 ───────────────────────────────────────────────────────
+
+#[derive(Accounts)]
+pub struct WithdrawFeesV2<'info> {
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    #[account(
+        seeds = [b"config_v2"],
+        bump = config.bump,
+        constraint = config.admin == admin.key() @ ErrorV2::UnauthorizedAdmin
+    )]
+    pub config: Account<'info, ConfigV2>,
+    #[account(
+        mut,
+        seeds = [b"market_v2", market.market_id.to_le_bytes().as_ref()],
+        bump = market.bump
+    )]
+    pub market: Account<'info, MarketV2>,
+    #[account(
+        mut,
+        seeds = [b"vault_v2", market.key().as_ref()],
+        bump = market.vault_bump
+    )]
+    pub vault: Account<'info, VaultV2>,
+}
+
+pub fn withdraw_fees_v2(ctx: Context<WithdrawFeesV2>) -> Result<()> {
+    let market = &mut ctx.accounts.market;
+    let amount = market.accrued_fees;
+    require!(amount > 0, ErrorV2::NothingToRedeem);
+    market.accrued_fees = 0;
+
+    // Fees live in the vault on top of `backing`; withdrawing them can
+    // never touch share backing.
+    let vault_info = ctx.accounts.vault.to_account_info();
+    let rent_min = Rent::get()?.minimum_balance(vault_info.data_len());
+    let after = vault_info
+        .lamports()
+        .checked_sub(amount)
+        .ok_or(ErrorV2::VaultInvariant)?;
+    require!(
+        after >= rent_min + ctx.accounts.vault.backing,
+        ErrorV2::VaultInvariant
+    );
+
+    **vault_info.try_borrow_mut_lamports()? -= amount;
+    **ctx.accounts.admin.to_account_info().try_borrow_mut_lamports()? += amount;
+    Ok(())
+}
