@@ -35,13 +35,34 @@ export function effectiveAdminPubkey(me) {
   return squads ? squads.vaultPda : me.publicKey;
 }
 
+/** Execute an already-approved vault transaction (threshold met). */
+export async function executeVaultTransaction(connection, me, transactionIndex) {
+  const squads = loadSquadsConfig();
+  if (!squads) throw new Error("no squads-admin.json — multisig not configured");
+  const sig = await multisig.rpc.vaultTransactionExecute({
+    connection,
+    feePayer: me,
+    multisigPda: squads.multisigPda,
+    transactionIndex: BigInt(transactionIndex),
+    member: me.publicKey,
+    signers: [me],
+  });
+  await connection.confirmTransaction(sig, "confirmed");
+  return sig;
+}
+
 /**
  * Send admin instructions. Direct when the local wallet is the admin;
  * through propose→approve→execute when the Squads vault is.
  * Instructions must already reference effectiveAdminPubkey() in their
  * admin account slot.
+ *
+ * With threshold > 1 the local member's approval is not enough: when
+ * `allowPending` is true this creates + approves the proposal and returns
+ * "pending:<index>" with instructions printed; otherwise it throws so
+ * unattended scripts fail loudly instead of continuing on a half-done op.
  */
-export async function adminSend(connection, me, instructions) {
+export async function adminSend(connection, me, instructions, { allowPending = false } = {}) {
   const squads = loadSquadsConfig();
   if (!squads) {
     const tx = new Transaction().add(...instructions);
@@ -98,6 +119,20 @@ export async function adminSend(connection, me, instructions) {
     member: me,
   });
   await connection.confirmTransaction(sig, "confirmed");
+
+  if (ms.threshold > 1) {
+    const msg =
+      `proposal #${transactionIndex} approved by the local member but needs ` +
+      `${ms.threshold - 1} more approval(s).\n` +
+      `  1. Open https://v4.squads.so (network: devnet) with the other member wallet,\n` +
+      `     find multisig ${multisigPda.toBase58()} and approve transaction #${transactionIndex}.\n` +
+      `  2. Then run: node scripts/v2-admin.mjs squads-execute ${transactionIndex}`;
+    if (!allowPending) {
+      throw new Error(`squads_approval_required — ${msg}`);
+    }
+    console.log(`\n⏸  ${msg}`);
+    return `pending:${transactionIndex}`;
+  }
 
   sig = await multisig.rpc.vaultTransactionExecute({
     connection,

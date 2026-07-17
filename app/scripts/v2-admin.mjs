@@ -5,7 +5,12 @@
 //   node scripts/v2-admin.mjs status
 //   node scripts/v2-admin.mjs settle <marketId> <winningOutcome>
 //   node scripts/v2-admin.mjs close <marketId>
-// Signs with ~/.config/solana/id.json (the V2 admin / upgrade authority).
+//   node scripts/v2-admin.mjs propose <marketId> <winningOutcome>   (TxLINE markets)
+//   node scripts/v2-admin.mjs finalize <marketId>                   (after 1h window)
+//   node scripts/v2-admin.mjs squads-execute <transactionIndex>     (after 2nd approval)
+// Signs with ~/.config/solana/id.json. Admin ops route through the Squads
+// vault automatically (see lib-squads.mjs); with threshold 2 they park as
+// proposals until the second member approves at v4.squads.so (devnet).
 
 import {
   Connection,
@@ -16,7 +21,7 @@ import {
   TransactionInstruction,
 } from "@solana/web3.js";
 import { createHash } from "crypto";
-import { adminSend, effectiveAdminPubkey } from "./lib-squads.mjs";
+import { adminSend, effectiveAdminPubkey, executeVaultTransaction } from "./lib-squads.mjs";
 import { readFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
@@ -108,7 +113,7 @@ if (cmd === "init-config") {
       i64(Number(closeTs)),
     ]),
   });
-  const sig = await adminSend(connection, admin, [ix]);
+  const sig = await adminSend(connection, admin, [ix], { allowPending: true });
   console.log("create_market_v2:", sig);
   console.log("marketId:", nextMarketId.toString());
   console.log("market PDA:", market.toBase58());
@@ -142,7 +147,7 @@ if (cmd === "init-config") {
     cmd === "settle"
       ? Buffer.concat([disc("settle_market_v2"), Buffer.from([Number(process.argv[4])])])
       : Buffer.concat([disc("set_market_status_v2"), Buffer.from([2])]);
-  const sig = await adminSend(connection, admin, [new TransactionInstruction({ programId: PROGRAM_ID, keys, data })]);
+  const sig = await adminSend(connection, admin, [new TransactionInstruction({ programId: PROGRAM_ID, keys, data })], { allowPending: true });
   console.log(`${cmd}:`, sig, "market:", market.toBase58());
 } else if (cmd === "propose") {
   // node scripts/v2-admin.mjs propose <marketId> <winningOutcome>
@@ -160,7 +165,7 @@ if (cmd === "init-config") {
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];
   const data = Buffer.concat([disc("propose_settle_market_v2"), Buffer.from([Number(process.argv[4])])]);
-  const sig = await adminSend(connection, admin, [new TransactionInstruction({ programId: PROGRAM_ID, keys, data })]);
+  const sig = await adminSend(connection, admin, [new TransactionInstruction({ programId: PROGRAM_ID, keys, data })], { allowPending: true });
   console.log("proposed:", sig, "market:", market.toBase58(), "proposal:", proposal.toBase58());
 } else if (cmd === "finalize") {
   // node scripts/v2-admin.mjs finalize <marketId> — permissionless after window.
@@ -176,6 +181,11 @@ if (cmd === "init-config") {
   const data = disc("finalize_settle_market_v2");
   const sig = await send([new TransactionInstruction({ programId: PROGRAM_ID, keys, data })]);
   console.log("finalized:", sig, "market:", market.toBase58());
+} else if (cmd === "squads-execute") {
+  // node scripts/v2-admin.mjs squads-execute <transactionIndex>
+  // Executes a vault transaction once all multisig approvals are in.
+  const sig = await executeVaultTransaction(connection, admin, Number(process.argv[3]));
+  console.log("executed:", sig);
 } else {
   console.log("unknown command");
   process.exit(1);
