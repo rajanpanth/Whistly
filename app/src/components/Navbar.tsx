@@ -8,12 +8,16 @@ import BrandMark from "./marketplace/BrandMark";
 import { PRIMARY_MARKET_NAV } from "@/lib/marketplaceData";
 import { useApp } from "./Providers";
 import { shortAddr } from "@/lib/utils";
-import WalletConnectModal from "./WalletConnectModal";
+import dynamic from "next/dynamic";
+import { TRADING_ROUTE_RE } from "@/lib/routes";
+
+// Loaded on demand: the connect-wallet modal (and its wallet-adapter-ui deps)
+// only downloads when the user first opens it.
+const WalletConnectModal = dynamic(() => import("./WalletConnectModal"), { ssr: false });
 
 // V2 trading routes render their own header (app/(trading)); suppress the
 // global Navbar there. The homepage `/` is intentionally excluded so its
 // chrome stays frozen.
-const TRADING_ROUTE_RE = /^\/(markets|market\/|event\/|live|portfolio|positions|orders|activity|matchday|rooms\/|fan-leaderboard|fan-profile|recap\/)/;
 
 export function Navbar() {
   const pathname = usePathname();
@@ -54,7 +58,7 @@ export function Navbar() {
       )}
       <button type="button" className="market-menu-button" onClick={() => setOpen(!open)} aria-expanded={open} aria-label="Toggle navigation">{open ? <X size={19} /> : <Menu size={19} />}</button></div></div>
     <nav className={`market-primary-nav ${open ? "is-open" : ""}`} aria-label="Primary navigation">{PRIMARY_MARKET_NAV.map(item => { const selected = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href.split("?")[0]); return <Link key={item.label} href={item.href} onClick={() => setOpen(false)} className={selected ? "active" : ""}>{item.label === "Live" && <span className="market-nav-live" />}{item.label}</Link>; })}</nav>
-    <WalletConnectModal isOpen={walletOpen} onClose={() => setWalletOpen(false)} />
+    {walletOpen && <WalletConnectModal isOpen={walletOpen} onClose={() => setWalletOpen(false)} />}
   </header>;
 }
 

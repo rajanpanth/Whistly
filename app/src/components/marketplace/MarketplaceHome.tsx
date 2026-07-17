@@ -2,8 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { Activity, ArrowUpRight, CheckCircle2, ChevronLeft, ChevronRight, CircleDot, Gift, ShieldCheck, Sparkles, TrendingUp, WalletCards } from "lucide-react";
-import WalletConnectModal from "@/components/WalletConnectModal";
+
+// Loaded on demand so the wallet-adapter UI stack stays out of the homepage bundle.
+const WalletConnectModal = dynamic(() => import("@/components/WalletConnectModal"), { ssr: false });
 import { useApp } from "@/components/Providers";
 import UpcomingFixtures from "@/components/UpcomingFixtures";
 import { FEATURED_MARKETS, LIVE_MARKETS, NEXT_KICKOFF, SOCCER_SPOTLIGHT, SPORTS_MARKETS, SPORT_TABS } from "@/lib/marketplaceData";
@@ -101,12 +104,15 @@ export default function MarketplaceHome() {
   }
 
   const markets = useMemo(() => activeSport === "All markets" ? SPORTS_MARKETS : SPORTS_MARKETS.filter(market => market.sport.toLowerCase().includes(activeSport.toLowerCase()) || market.tags.some(tag => tag.toLowerCase().includes(activeSport.toLowerCase()))), [activeSport]);
+  // Markets already shown in the Soccer spotlight are excluded from the
+  // themed sections below so no card appears twice on the page.
+  const spotlightIdSet = new Set(["final-o25", "final-btts", "final-extra-time", "third-place-result"]);
   const groups = [
-    { title: "World Cup goals", filter: "Goals", items: markets.filter(m => (m.sport === "Goals" || m.sport === "Totals" || m.tags.includes("Goals")) && m.status !== "ended") },
-    { title: "Match result", filter: "Match Result", items: markets.filter(m => (m.sport === "Match Result" || m.tags.includes("Match Result")) && m.status !== "ended") },
+    { title: "World Cup goals", filter: "Goals", items: markets.filter(m => (m.sport === "Goals" || m.sport === "Totals" || m.tags.includes("Goals")) && m.status !== "ended" && !spotlightIdSet.has(m.id)) },
+    { title: "Match result", filter: "Match Result", items: markets.filter(m => (m.sport === "Match Result" || m.tags.includes("Match Result")) && m.status !== "ended" && !spotlightIdSet.has(m.id)) },
     { title: "Settled knockout matches", filter: "Settled", items: markets.filter(m => m.status === "ended") },
   ];
-  const spotlightGrid = SPORTS_MARKETS.filter(m => ["final-o25", "final-btts", "final-extra-time", "third-place-result"].includes(m.id));
+  const spotlightGrid = SPORTS_MARKETS.filter(m => spotlightIdSet.has(m.id));
 
   return <div className="market-home">
     <div className="market-marketbar"><div><span className="market-marketbar-dot" /> Live market discovery</div><span>Solana devnet · simulated data</span></div>
@@ -158,6 +164,6 @@ export default function MarketplaceHome() {
       <MarketplaceSidebar onWallet={() => setWalletOpen(true)} walletConnected={walletConnected} walletAddress={walletAddress} />
     </div>
 
-    <WalletConnectModal isOpen={walletOpen} onClose={() => setWalletOpen(false)} />
+    {walletOpen && <WalletConnectModal isOpen={walletOpen} onClose={() => setWalletOpen(false)} />}
   </div>;
 }

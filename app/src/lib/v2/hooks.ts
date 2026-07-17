@@ -33,8 +33,21 @@ function usePolling<T>(url: string | null, intervalMs = 4000) {
         setLoading(true);
         refresh();
         if (!url || intervalMs <= 0) return;
-        const t = setInterval(refresh, intervalMs);
-        return () => clearInterval(t);
+
+        // Pause polling while the tab is hidden (saves battery, RPC quota,
+        // and rate-limit budget); refresh immediately on return.
+        const tick = () => {
+            if (!document.hidden) refresh();
+        };
+        const onVisible = () => {
+            if (!document.hidden) refresh();
+        };
+        const t = setInterval(tick, intervalMs);
+        document.addEventListener("visibilitychange", onVisible);
+        return () => {
+            clearInterval(t);
+            document.removeEventListener("visibilitychange", onVisible);
+        };
     }, [url, intervalMs, refresh]);
 
     return { data, error, loading, refresh };

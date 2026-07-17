@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 /* Whistly mark: whistle with a football chamber (brand asset).
    /brand-logo.png = white ink for dark surfaces (site default)
@@ -6,7 +7,7 @@ import Link from "next/link";
 export default function BrandMark({ compact = false }: { compact?: boolean }) {
   return (
     <Link href="/" aria-label="Whistly home" className="market-brand">
-      <img src="/brand-logo.png" alt="" width={46} height={27} className="market-brand-logo" />
+      <Image src="/brand-logo.png" alt="" width={46} height={27} priority className="market-brand-logo" />
       {!compact && <span>Whistly <b>Markets</b></span>}
     </Link>
   );

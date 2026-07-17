@@ -301,6 +301,12 @@ export async function settleMatchOnChain(params: {
 
 // ─── Orchestration: post + match + settle ───────────────────────────────────
 
+// Consecutive on-chain settlement failures per RESTING order. Once an order
+// keeps getting rejected by the program (stale funding, on-chain cancel), it
+// is phantom liquidity — retire it so it stops blocking the book.
+const restingFailCounts = new Map<string, number>();
+const MAX_RESTING_FAILURES = 3;
+
 export interface MatchOutcome {
     settled: SettledFill[];
     remaining: number;
@@ -372,6 +378,7 @@ export async function matchAndSettle(orderHash: string): Promise<MatchOutcome> {
                 fillQty: qty,
                 mode: match.mode,
             });
+            restingFailCounts.delete(match.resting.orderHash);
             remaining -= qty;
 
             // Update DB only AFTER on-chain confirmation.
@@ -424,14 +431,32 @@ export async function matchAndSettle(orderHash: string): Promise<MatchOutcome> {
             });
         } catch (err) {
             // On-chain rejection of this pairing (stale funding, cancelled
-            // on-chain, expiry race…). Skip candidate; if the RESTING order
-            // is the culprit it will keep failing and can be swept by the
-            // stale-order crank.
+            // on-chain, expiry race…). Skip the candidate, but track repeat
+            // offenders: a resting order that keeps failing on-chain is
+            // phantom liquidity, so retire it instead of letting it degrade
+            // every future crossing order.
             console.error("settleMatchOnChain failed", {
                 maker: match.resting.orderHash.slice(0, 16),
                 taker: orderHash.slice(0, 16),
                 err: err instanceof Error ? err.message : err,
             });
+            const fails = (restingFailCounts.get(match.resting.orderHash) ?? 0) + 1;
+            restingFailCounts.set(match.resting.orderHash, fails);
+            if (fails >= MAX_RESTING_FAILURES) {
+                restingFailCounts.delete(match.resting.orderHash);
+                try {
+                    await store.updateOrder(match.resting.orderHash, {
+                        status: "rejected",
+                        rejectReason: "onchain_settlement_failed",
+                    });
+                    console.error("resting order retired after repeated on-chain failures", {
+                        orderHash: match.resting.orderHash.slice(0, 16),
+                        failures: fails,
+                    });
+                } catch {
+                    // Store write failed — the counter reset means we retry later.
+                }
+            }
             continue;
         }
     }

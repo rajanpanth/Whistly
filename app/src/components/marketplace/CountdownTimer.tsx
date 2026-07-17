@@ -36,9 +36,27 @@ function RollingNumber({ text }: { text: string }) {
   return <>{text.split("").map((ch, i) => <RollingDigit key={`${text.length}-${i}`} digit={ch.charCodeAt(0) - 48} />)}</>;
 }
 
+/**
+ * True once mounted when the user prefers reduced motion. Digit reels are
+ * then replaced with plain text — fewer DOM nodes and no transform work.
+ * Defaults to false so server and first client render stay identical.
+ */
+function usePrefersReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduced(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setReduced(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return reduced;
+}
+
 export default function CountdownTimer({ value, target }: { value: string; target?: string }) {
   const initial = useMemo(() => parseCountdown(value), [value]);
   const [remaining, setRemaining] = useState(initial);
+  const prefersReducedMotion = usePrefersReducedMotion();
 
   useEffect(() => setRemaining(initial), [initial]);
 
@@ -77,7 +95,9 @@ export default function CountdownTimer({ value, target }: { value: string; targe
     >
       {segments.map(([num, unit]) => (
         <em key={unit}>
-          <RollingNumber text={num} />
+          {prefersReducedMotion
+            ? <span style={{ fontVariantNumeric: "tabular-nums" }}>{num}</span>
+            : <RollingNumber text={num} />}
           <i>{unit}</i>
         </em>
       ))}

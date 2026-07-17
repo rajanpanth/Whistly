@@ -8,6 +8,11 @@ const withBundleAnalyzer = process.env.ANALYZE === "true"
 
 const nextConfig = {
   outputFileTracingRoot: path.join(__dirname, "../"),
+  experimental: {
+    // Tree-shake icon imports so `import { X } from "lucide-react"` doesn't
+    // pull the whole icon library into every chunk.
+    optimizePackageImports: ["lucide-react"],
+  },
   transpilePackages: [
     "bs58",
     "base-x",

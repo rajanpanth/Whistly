@@ -9,11 +9,22 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+// Short in-process cache: getProgramAccounts is one of the most expensive
+// Solana RPC calls and this is a public, polled endpoint. Clients poll every
+// ~6s, so a 3s TTL keeps data fresh while collapsing concurrent readers
+// onto one upstream fetch per instance.
+const CACHE_TTL_MS = 3_000;
+let _cache: { body: unknown; expiresAt: number } | null = null;
+
 /**
  * GET /api/v2/markets — every on-chain MarketV2 account plus book summary
  * (best bid/ask per outcome from real resting orders only).
  */
 export async function GET() {
+    if (_cache && Date.now() < _cache.expiresAt) {
+        return NextResponse.json(_cache.body);
+    }
+
     const disc = await accountDiscriminator("MarketV2");
     const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
         filters: [{ memcmp: { offset: 0, bytes: bs58.encode(disc) } }],
@@ -21,13 +32,22 @@ export async function GET() {
 
     const store = getOrderStore();
     const now = Math.floor(Date.now() / 1000);
+
+    // Fetch order/fill data for all markets concurrently instead of two
+    // serialized store queries per market (N+1).
+    const enriched = await Promise.all(
+        accounts.map(async ({ pubkey, account }) => {
+            const [restingAll, fills] = await Promise.all([
+                store.getRestingOrders(pubkey.toBase58()),
+                store.getFills(pubkey.toBase58(), 1),
+            ]);
+            return { pubkey, account, resting: restingAll.filter((o) => o.expiry > now), fills };
+        })
+    );
+
     const markets = [];
-    for (const { pubkey, account } of accounts) {
+    for (const { pubkey, account, resting, fills } of enriched) {
         const m = parseMarketV2(account.data);
-        const resting = (await store.getRestingOrders(pubkey.toBase58())).filter(
-            (o) => o.expiry > now
-        );
-        const fills = await store.getFills(pubkey.toBase58(), 1);
         const perOutcome = [];
         for (let i = 0; i < m.numOutcomes; i++) {
             let bestBid: number | null = null;
@@ -68,5 +88,7 @@ export async function GET() {
         });
     }
     markets.sort((a, b) => b.createdAt - a.createdAt);
-    return NextResponse.json({ markets });
+    const body = { markets };
+    _cache = { body, expiresAt: Date.now() + CACHE_TTL_MS };
+    return NextResponse.json(body);
 }

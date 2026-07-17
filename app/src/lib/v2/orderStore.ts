@@ -2,7 +2,7 @@
 // Server-side persistence for signed order intents + settled fills.
 //
 // Two adapters:
-//  - Supabase (production; tables from supabase-v2-clob.sql)
+//  - Supabase (production; tables from migrations/006_v2_clob.sql)
 //  - In-memory (local dev without Supabase env — same pattern as the
 //    existing liveGoalMarketStore). The chain remains the source of truth
 //    for balances/positions/fills either way; this store is the index.
