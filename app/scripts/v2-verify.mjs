@@ -21,6 +21,7 @@ import {
   TransactionInstruction,
 } from "@solana/web3.js";
 import nacl from "tweetnacl";
+import { adminSend, effectiveAdminPubkey } from "./lib-squads.mjs";
 import { createHash } from "crypto";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { homedir } from "os";
@@ -140,17 +141,17 @@ const cfg = parseConfig((await connection.getAccountInfo(configPda)).data);
 const marketId = cfg.nextMarketId;
 const market = marketPda(marketId);
 const closeTs = Math.floor(Date.now() / 1000) + 30;
-sigs.createMarket = await send([new TransactionInstruction({
+sigs.createMarket = await adminSend(connection, admin, [new TransactionInstruction({
   programId: PROGRAM_ID,
   keys: [
-    { pubkey: admin.publicKey, isSigner: true, isWritable: true },
+    { pubkey: effectiveAdminPubkey(admin), isSigner: true, isWritable: true },
     { pubkey: configPda, isSigner: false, isWritable: true },
     { pubkey: market, isSigner: false, isWritable: true },
     { pubkey: vaultPda(market), isSigner: false, isWritable: true },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ],
   data: Buffer.concat([disc("create_market_v2"), str("VERIFY: coin flip market"), vecStr(["No", "Yes"]), Buffer.from([0]), u64(0), Buffer.from([0]), i64(closeTs)]),
-})], admin);
+})]);
 console.log("  market", market.toBase58(), "id", marketId.toString());
 
 // 2. deposits
@@ -200,24 +201,24 @@ assert(bNoAfter === 40n, `B NO reduced to 40 (got ${bNoAfter})`);
 
 // 8. close + settle (YES wins)
 console.log("\n[8] close + settle (YES wins)");
-sigs.closeMarket = await send([new TransactionInstruction({
+sigs.closeMarket = await adminSend(connection, admin, [new TransactionInstruction({
   programId: PROGRAM_ID,
   keys: [
-    { pubkey: admin.publicKey, isSigner: true, isWritable: false },
+    { pubkey: effectiveAdminPubkey(admin), isSigner: true, isWritable: false },
     { pubkey: configPda, isSigner: false, isWritable: false },
     { pubkey: market, isSigner: false, isWritable: true },
   ],
   data: Buffer.concat([disc("set_market_status_v2"), Buffer.from([2])]),
-})], admin);
-sigs.settleMarket = await send([new TransactionInstruction({
+})]);
+sigs.settleMarket = await adminSend(connection, admin, [new TransactionInstruction({
   programId: PROGRAM_ID,
   keys: [
-    { pubkey: admin.publicKey, isSigner: true, isWritable: false },
+    { pubkey: effectiveAdminPubkey(admin), isSigner: true, isWritable: false },
     { pubkey: configPda, isSigner: false, isWritable: false },
     { pubkey: market, isSigner: false, isWritable: true },
   ],
   data: Buffer.concat([disc("settle_market_v2"), Buffer.from([1])]), // winning outcome = 1 (YES)
-})], admin);
+})]);
 assert(true, "market settled with YES winning");
 
 // 9. redeem

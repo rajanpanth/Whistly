@@ -16,6 +16,7 @@ import {
   TransactionInstruction,
 } from "@solana/web3.js";
 import { createHash } from "crypto";
+import { adminSend, effectiveAdminPubkey } from "./lib-squads.mjs";
 import { readFileSync } from "fs";
 import { homedir } from "os";
 import { join } from "path";
@@ -91,7 +92,7 @@ if (cmd === "init-config") {
   const ix = new TransactionInstruction({
     programId: PROGRAM_ID,
     keys: [
-      { pubkey: admin.publicKey, isSigner: true, isWritable: true },
+      { pubkey: effectiveAdminPubkey(admin), isSigner: true, isWritable: true },
       { pubkey: configPda, isSigner: false, isWritable: true },
       { pubkey: market, isSigner: false, isWritable: true },
       { pubkey: vaultPda(market), isSigner: false, isWritable: true },
@@ -107,7 +108,7 @@ if (cmd === "init-config") {
       i64(Number(closeTs)),
     ]),
   });
-  const sig = await send([ix]);
+  const sig = await adminSend(connection, admin, [ix]);
   console.log("create_market_v2:", sig);
   console.log("marketId:", nextMarketId.toString());
   console.log("market PDA:", market.toBase58());
@@ -133,7 +134,7 @@ if (cmd === "init-config") {
   const marketId = Number(process.argv[3]);
   const market = marketPda(marketId);
   const keys = [
-    { pubkey: admin.publicKey, isSigner: true, isWritable: false },
+    { pubkey: effectiveAdminPubkey(admin), isSigner: true, isWritable: false },
     { pubkey: configPda, isSigner: false, isWritable: false },
     { pubkey: market, isSigner: false, isWritable: true },
   ];
@@ -141,7 +142,7 @@ if (cmd === "init-config") {
     cmd === "settle"
       ? Buffer.concat([disc("settle_market_v2"), Buffer.from([Number(process.argv[4])])])
       : Buffer.concat([disc("set_market_status_v2"), Buffer.from([2])]);
-  const sig = await send([new TransactionInstruction({ programId: PROGRAM_ID, keys, data })]);
+  const sig = await adminSend(connection, admin, [new TransactionInstruction({ programId: PROGRAM_ID, keys, data })]);
   console.log(`${cmd}:`, sig, "market:", market.toBase58());
 } else if (cmd === "propose") {
   // node scripts/v2-admin.mjs propose <marketId> <winningOutcome>
@@ -152,14 +153,14 @@ if (cmd === "init-config") {
   const [proposal] = PublicKey.findProgramAddressSync(
     [Buffer.from("resolution_v2"), market.toBuffer()], PROGRAM_ID);
   const keys = [
-    { pubkey: admin.publicKey, isSigner: true, isWritable: true },
+    { pubkey: effectiveAdminPubkey(admin), isSigner: true, isWritable: true },
     { pubkey: configPda, isSigner: false, isWritable: false },
     { pubkey: market, isSigner: false, isWritable: false },
     { pubkey: proposal, isSigner: false, isWritable: true },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];
   const data = Buffer.concat([disc("propose_settle_market_v2"), Buffer.from([Number(process.argv[4])])]);
-  const sig = await send([new TransactionInstruction({ programId: PROGRAM_ID, keys, data })]);
+  const sig = await adminSend(connection, admin, [new TransactionInstruction({ programId: PROGRAM_ID, keys, data })]);
   console.log("proposed:", sig, "market:", market.toBase58(), "proposal:", proposal.toBase58());
 } else if (cmd === "finalize") {
   // node scripts/v2-admin.mjs finalize <marketId> — permissionless after window.
