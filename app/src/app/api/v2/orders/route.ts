@@ -13,7 +13,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const PostOrderSchema = z.object({
-    payloadHex: z.string().regex(/^[0-9a-fA-F]{212}$/), // 106 bytes
+    payloadHex: z.string().regex(/^[0-9a-fA-F]{212}$|^[0-9a-fA-F]{220}$/), // 106 (V2) or 110 (V3) bytes
     signatureHex: z.string().regex(/^[0-9a-fA-F]{128}$/), // 64 bytes
     orderType: z.enum(["LIMIT", "MARKET"]),
 });

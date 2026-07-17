@@ -26,6 +26,13 @@ pub struct ResolveMarketV2<'info> {
 pub fn settle_market_v2(ctx: Context<ResolveMarketV2>, winning_outcome: u8) -> Result<()> {
     let clock = Clock::get()?;
     let market = &mut ctx.accounts.market;
+    // Data-resolved markets must go through the propose → dispute-window →
+    // finalize flow; instant unilateral settlement is only for markets that
+    // were explicitly created as admin-resolved.
+    require!(
+        market.resolution_source != MarketV2::RESOLUTION_SOURCE_TXLINE,
+        ErrorV2::UseProposedSettlement
+    );
     require!(
         market.status == MarketV2::STATUS_OPEN
             || market.status == MarketV2::STATUS_PAUSED
@@ -46,6 +53,122 @@ pub fn settle_market_v2(ctx: Context<ResolveMarketV2>, winning_outcome: u8) -> R
     emit!(MarketResolvedV2 {
         market: market.key(),
         winning_outcome,
+    });
+    Ok(())
+}
+
+// ─── propose / finalize settlement (data-resolved markets) ─────────────────
+// Admin proposes the outcome; anyone can finalize after the dispute window.
+// Re-proposing overwrites the proposal and restarts the window, letting the
+// admin correct a wrong feed reading before anything becomes redeemable.
+
+pub const DISPUTE_WINDOW_SECONDS: i64 = 60 * 60; // 1 hour
+
+#[derive(Accounts)]
+pub struct ProposeSettleMarketV2<'info> {
+    #[account(mut)]
+    pub admin: Signer<'info>,
+    #[account(
+        seeds = [b"config_v2"],
+        bump = config.bump,
+        constraint = config.admin == admin.key() @ ErrorV2::UnauthorizedAdmin
+    )]
+    pub config: Account<'info, ConfigV2>,
+    #[account(
+        seeds = [b"market_v2", market.market_id.to_le_bytes().as_ref()],
+        bump = market.bump
+    )]
+    pub market: Account<'info, MarketV2>,
+    #[account(
+        init_if_needed,
+        payer = admin,
+        space = ResolutionProposalV2::SIZE,
+        seeds = [b"resolution_v2", market.key().as_ref()],
+        bump
+    )]
+    pub proposal: Account<'info, ResolutionProposalV2>,
+    pub system_program: Program<'info, System>,
+}
+
+pub fn propose_settle_market_v2(
+    ctx: Context<ProposeSettleMarketV2>,
+    winning_outcome: u8,
+) -> Result<()> {
+    let clock = Clock::get()?;
+    let market = &ctx.accounts.market;
+    require!(
+        market.status == MarketV2::STATUS_OPEN
+            || market.status == MarketV2::STATUS_PAUSED
+            || market.status == MarketV2::STATUS_CLOSED,
+        ErrorV2::MarketAlreadyResolved
+    );
+    require!(
+        market.status == MarketV2::STATUS_CLOSED || clock.unix_timestamp >= market.close_ts,
+        ErrorV2::MarketNotClosed
+    );
+    require!(winning_outcome < market.num_outcomes, ErrorV2::InvalidOutcome);
+
+    let proposal = &mut ctx.accounts.proposal;
+    proposal.market = market.key();
+    proposal.winning_outcome = winning_outcome;
+    proposal.proposed_at = clock.unix_timestamp;
+    proposal.bump = ctx.bumps.proposal;
+
+    emit!(SettlementProposedV2 {
+        market: market.key(),
+        winning_outcome,
+        proposed_at: clock.unix_timestamp,
+    });
+    Ok(())
+}
+
+#[derive(Accounts)]
+pub struct FinalizeSettleMarketV2<'info> {
+    /// Any signer may finalize once the dispute window passed.
+    pub caller: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [b"market_v2", market.market_id.to_le_bytes().as_ref()],
+        bump = market.bump
+    )]
+    pub market: Account<'info, MarketV2>,
+    #[account(
+        seeds = [b"resolution_v2", market.key().as_ref()],
+        bump = proposal.bump,
+        constraint = proposal.market == market.key() @ ErrorV2::NoProposal
+    )]
+    pub proposal: Account<'info, ResolutionProposalV2>,
+}
+
+pub fn finalize_settle_market_v2(ctx: Context<FinalizeSettleMarketV2>) -> Result<()> {
+    let clock = Clock::get()?;
+    let market = &mut ctx.accounts.market;
+    let proposal = &ctx.accounts.proposal;
+    require!(
+        market.status == MarketV2::STATUS_OPEN
+            || market.status == MarketV2::STATUS_PAUSED
+            || market.status == MarketV2::STATUS_CLOSED,
+        ErrorV2::MarketAlreadyResolved
+    );
+    require!(
+        clock.unix_timestamp
+            >= proposal
+                .proposed_at
+                .checked_add(DISPUTE_WINDOW_SECONDS)
+                .ok_or(ErrorV2::MathOverflow)?,
+        ErrorV2::DisputeWindowActive
+    );
+    require!(
+        proposal.winning_outcome < market.num_outcomes,
+        ErrorV2::InvalidOutcome
+    );
+
+    market.status = MarketV2::STATUS_SETTLED;
+    market.winning_outcome = proposal.winning_outcome;
+
+    emit!(MarketResolvedV2 {
+        market: market.key(),
+        winning_outcome: proposal.winning_outcome,
     });
     Ok(())
 }

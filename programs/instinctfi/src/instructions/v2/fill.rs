@@ -263,6 +263,20 @@ pub fn settle_fill_v2(
         ErrorV2::InvalidOutcome
     );
 
+    // Maker priority: execution happens at the MAKER's price, so the operator
+    // must not be free to pick which order is "maker". When both payloads
+    // carry a signed creation timestamp (V3), the maker must be the earlier
+    // order. Legacy V2 payloads (no timestamp) are grandfathered.
+    if let (Some(m_ts), Some(t_ts)) = (maker.created_ts, taker.created_ts) {
+        require!(m_ts <= t_ts, ErrorV2::MakerPriorityViolated);
+    }
+    // FOK/FAK orders are immediate-or-cancel — they never rest on the book,
+    // so they can never legitimately be the maker side of a fill.
+    require!(
+        maker.tif == TIF_GTC || maker.tif == TIF_GTD,
+        ErrorV2::InvalidMakerTif
+    );
+
     // 3. Overfill/replay/cancel guards (canonical per-order fill state).
     init_or_check_fill_state(
         &mut ctx.accounts.maker_fill,

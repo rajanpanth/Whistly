@@ -53,9 +53,15 @@ pub const MAX_OUTCOMES_V2: usize = 8;
 /// Domain-separation prefix every signed order message must start with.
 pub const ORDER_MAGIC: [u8; 4] = *b"WV2O";
 pub const ORDER_VERSION: u8 = 2;
+/// V3 payload appends a signed creation timestamp (u32 unix seconds) used to
+/// enforce maker priority on-chain. V2 payloads remain accepted (grandfathered
+/// resting orders); enforcement applies when both sides carry a timestamp.
+pub const ORDER_VERSION_V3: u8 = 3;
 
 /// Byte length of the canonical order payload (see OrderPayloadV2).
 pub const ORDER_PAYLOAD_LEN: usize = 4 + 1 + 32 + 32 + 1 + 1 + 2 + 8 + 8 + 8 + 1 + 8;
+/// V3 payload length: V2 + u32 created_ts.
+pub const ORDER_PAYLOAD_LEN_V3: usize = ORDER_PAYLOAD_LEN + 4;
 
 pub const ORDER_SIDE_BUY: u8 = 0;
 pub const ORDER_SIDE_SELL: u8 = 1;
@@ -133,9 +139,29 @@ impl MarketV2 {
     pub const STATUS_VOID: u8 = 4;
     pub const WINNING_UNSET: u8 = 255;
 
+    pub const RESOLUTION_SOURCE_ADMIN: u8 = 0;
+    pub const RESOLUTION_SOURCE_TXLINE: u8 = 1;
+
     pub fn is_tradable(&self, now: i64) -> bool {
         self.status == Self::STATUS_OPEN && now < self.close_ts
     }
+}
+
+/// Two-step settlement for data-resolved markets: the admin PROPOSES an
+/// outcome, and only after a public dispute window can anyone FINALIZE it.
+/// Removes instant unilateral settlement — holders get time to challenge a
+/// wrong outcome (admin can re-propose, which restarts the window).
+/// PDA seeds: ["resolution_v2", market].
+#[account]
+pub struct ResolutionProposalV2 {
+    pub market: Pubkey,
+    pub winning_outcome: u8,
+    pub proposed_at: i64,
+    pub bump: u8,
+}
+
+impl ResolutionProposalV2 {
+    pub const SIZE: usize = 8 + 32 + 1 + 8 + 1;
 }
 
 // ─── VaultV2 ────────────────────────────────────────────────────────────────
@@ -224,8 +250,9 @@ pub struct OrderFillStateV2 {
 /// | 89     | 8   | expiry (i64) |
 /// | 97     | 1   | tif          |
 /// | 98     | 8   | salt         |
+/// | 106    | 4   | created_ts (u32, V3 only) |
 ///
-/// Total = ORDER_PAYLOAD_LEN (106).
+/// Total = ORDER_PAYLOAD_LEN (106) for V2, ORDER_PAYLOAD_LEN_V3 (110) for V3.
 #[derive(Clone, Copy, Debug)]
 pub struct OrderPayloadV2 {
     pub market: Pubkey,
@@ -238,14 +265,22 @@ pub struct OrderPayloadV2 {
     pub expiry: i64,
     pub tif: u8,
     pub salt: u64,
+    /// Signed creation time (unix seconds). None for legacy V2 payloads.
+    /// When both orders in a fill carry a timestamp, the program enforces
+    /// maker.created_ts <= taker.created_ts (price-time maker priority).
+    pub created_ts: Option<u32>,
 }
 
 impl OrderPayloadV2 {
     pub fn parse(data: &[u8]) -> Option<Self> {
-        if data.len() != ORDER_PAYLOAD_LEN {
-            return None;
-        }
-        if data[0..4] != ORDER_MAGIC || data[4] != ORDER_VERSION {
+        let created_ts = match (data.len(), data.get(4)) {
+            (ORDER_PAYLOAD_LEN, Some(&ORDER_VERSION)) => None,
+            (ORDER_PAYLOAD_LEN_V3, Some(&ORDER_VERSION_V3)) => {
+                Some(u32::from_le_bytes(data[106..110].try_into().ok()?))
+            }
+            _ => return None,
+        };
+        if data[0..4] != ORDER_MAGIC {
             return None;
         }
         let market = Pubkey::try_from(&data[5..37]).ok()?;
@@ -261,6 +296,7 @@ impl OrderPayloadV2 {
             expiry: i64::from_le_bytes(data[89..97].try_into().ok()?),
             tif: data[97],
             salt: u64::from_le_bytes(data[98..106].try_into().ok()?),
+            created_ts,
         })
     }
 

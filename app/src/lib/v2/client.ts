@@ -71,6 +71,8 @@ export async function submitOrder(
         expiry: BigInt(params.expiryUnix ?? now + 7 * 86400),
         tif: TIF_MAP[params.tif ?? "GTC"],
         salt: BigInt(Math.floor(Math.random() * 1e12)),
+        // V3: signed creation time — lets the program enforce maker priority.
+        createdTs: now,
     });
     const signature = await signMessage(payload);
     const res = await fetch("/api/v2/orders", {

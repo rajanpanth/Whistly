@@ -95,6 +95,32 @@ describe("V2 order codec", () => {
         expect(decodeOrderV2(bad)).toBeNull();
     });
 
+    it("V3: createdTs produces 110-byte version-3 payload that round-trips", () => {
+        const v3 = { ...sample, createdTs: 1_800_000_100 };
+        const bytes = encodeOrderV2(v3);
+        expect(bytes.length).toBe(110);
+        expect(bytes[4]).toBe(3);
+        const decoded = decodeOrderV2(bytes)!;
+        expect(decoded.createdTs).toBe(1_800_000_100);
+        expect(decoded.priceBps).toBe(5400);
+        expect(decoded.salt).toBe(42n);
+    });
+
+    it("V3: legacy 106-byte payloads still decode with createdTs undefined", () => {
+        const decoded = decodeOrderV2(encodeOrderV2(sample))!;
+        expect(decoded.createdTs).toBeUndefined();
+    });
+
+    it("V3: version/length mismatches are rejected", () => {
+        const v3 = encodeOrderV2({ ...sample, createdTs: 1 });
+        // 110 bytes claiming version 2 → invalid
+        const wrongVersion = v3.slice();
+        wrongVersion[4] = 2;
+        expect(decodeOrderV2(wrongVersion)).toBeNull();
+        // truncated v3 → invalid
+        expect(decodeOrderV2(v3.slice(0, 108))).toBeNull();
+    });
+
     it("hash is deterministic, 32 bytes, salt-sensitive", async () => {
         const h1 = await hashOrderV2(encodeOrderV2(sample));
         const h2 = await hashOrderV2(encodeOrderV2(sample));

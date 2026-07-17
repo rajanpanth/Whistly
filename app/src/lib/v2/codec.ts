@@ -16,14 +16,20 @@
 // | 89     | 8   | expiry LE    |
 // | 97     | 1   | tif          |
 // | 98     | 8   | salt LE      |
+// | 106    | 4   | created_ts LE (u32, V3 only) |
 //
 // Order hash = SHA-256(payload) — matches solana_program::hash::hash.
+// V3 appends a signed creation timestamp so the program can enforce
+// maker priority (maker.created_ts <= taker.created_ts). Legacy V2
+// payloads (106 bytes) remain decodable and accepted on-chain.
 
 import { PublicKey } from "@solana/web3.js";
 
 export const ORDER_MAGIC = new TextEncoder().encode("WV2O");
 export const ORDER_VERSION = 2;
+export const ORDER_VERSION_V3 = 3;
 export const ORDER_PAYLOAD_LEN = 106;
+export const ORDER_PAYLOAD_LEN_V3 = 110;
 
 export const SIDE_BUY = 0;
 export const SIDE_SELL = 1;
@@ -56,13 +62,16 @@ export interface OrderPayloadV2 {
     expiry: bigint;
     tif: TimeInForce;
     salt: bigint;
+    /** unix seconds the order was created; undefined for legacy V2 payloads */
+    createdTs?: number;
 }
 
 export function encodeOrderV2(order: OrderPayloadV2): Uint8Array {
-    const buf = new Uint8Array(ORDER_PAYLOAD_LEN);
+    const isV3 = order.createdTs !== undefined;
+    const buf = new Uint8Array(isV3 ? ORDER_PAYLOAD_LEN_V3 : ORDER_PAYLOAD_LEN);
     const view = new DataView(buf.buffer);
     buf.set(ORDER_MAGIC, 0);
-    buf[4] = ORDER_VERSION;
+    buf[4] = isV3 ? ORDER_VERSION_V3 : ORDER_VERSION;
     buf.set(order.market.toBytes(), 5);
     buf.set(order.maker.toBytes(), 37);
     buf[69] = order.outcomeIndex;
@@ -73,17 +82,19 @@ export function encodeOrderV2(order: OrderPayloadV2): Uint8Array {
     view.setBigInt64(89, order.expiry, true);
     buf[97] = order.tif;
     view.setBigUint64(98, order.salt, true);
+    if (isV3) view.setUint32(106, order.createdTs!, true);
     return buf;
 }
 
 export function decodeOrderV2(data: Uint8Array): OrderPayloadV2 | null {
-    if (data.length !== ORDER_PAYLOAD_LEN) return null;
+    const isLegacy = data.length === ORDER_PAYLOAD_LEN && data[4] === ORDER_VERSION;
+    const isV3 = data.length === ORDER_PAYLOAD_LEN_V3 && data[4] === ORDER_VERSION_V3;
+    if (!isLegacy && !isV3) return null;
     if (
         data[0] !== ORDER_MAGIC[0] ||
         data[1] !== ORDER_MAGIC[1] ||
         data[2] !== ORDER_MAGIC[2] ||
-        data[3] !== ORDER_MAGIC[3] ||
-        data[4] !== ORDER_VERSION
+        data[3] !== ORDER_MAGIC[3]
     ) {
         return null;
     }
@@ -99,6 +110,7 @@ export function decodeOrderV2(data: Uint8Array): OrderPayloadV2 | null {
         expiry: view.getBigInt64(89, true),
         tif: data[97] as TimeInForce,
         salt: view.getBigUint64(98, true),
+        ...(isV3 ? { createdTs: view.getUint32(106, true) } : {}),
     };
 }
 

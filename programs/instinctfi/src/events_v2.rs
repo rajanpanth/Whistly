@@ -75,6 +75,13 @@ pub struct MarketResolvedV2 {
 }
 
 #[event]
+pub struct SettlementProposedV2 {
+    pub market: Pubkey,
+    pub winning_outcome: u8,
+    pub proposed_at: i64,
+}
+
+#[event]
 pub struct RedeemedV2 {
     pub market: Pubkey,
     pub owner: Pubkey,

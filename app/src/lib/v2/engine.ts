@@ -104,6 +104,11 @@ export async function validateOrder(input: PostOrderInput): Promise<ValidationRe
     }
     const now = Math.floor(Date.now() / 1000);
     if (Number(payload.expiry) <= now) return { ok: false, error: "order_expired" };
+    // V3 signed timestamp sanity: reject clocks wildly off from server time so
+    // maker-priority ordering stays meaningful (5 min behind / 1 min ahead).
+    if (payload.createdTs !== undefined && (payload.createdTs < now - 300 || payload.createdTs > now + 60)) {
+        return { ok: false, error: "bad_created_ts" };
+    }
 
     // 3. Replay defense (per-maker nonce unique).
     const store = getOrderStore();
@@ -368,6 +373,12 @@ export async function matchAndSettle(orderHash: string): Promise<MatchOutcome> {
     const settled: SettledFill[] = [];
     for (const match of matches) {
         if (remaining === 0n) break;
+        // Maker-priority pre-check: the program rejects fills where the
+        // resting order's signed timestamp is later than the taker's —
+        // skip such pairs instead of burning a guaranteed-failing tx.
+        const makerTs = decodeOrderV2(fromHex(match.resting.payloadHex))?.createdTs;
+        const takerTs = decodeOrderV2(fromHex(incoming.payloadHex))?.createdTs;
+        if (makerTs !== undefined && takerTs !== undefined && makerTs > takerTs) continue;
         const qty = remaining < match.quantity ? remaining : match.quantity;
         try {
             const txSignature = await settleMatchOnChain({
@@ -401,6 +412,15 @@ export async function matchAndSettle(orderHash: string): Promise<MatchOutcome> {
                 takerOrderHash: incoming.orderHash,
             };
             settled.push(fill);
+            // Mirror the program's fee math exactly (fill.rs): taker fee on
+            // TAKER notional, rounded up. In cross (mint/burn) mode the taker
+            // pays the complementary price; in transfer mode the maker price.
+            const takerPerShareBps =
+                match.mode === "TRANSFER"
+                    ? match.resting.priceBps
+                    : PRICE_SCALE - match.resting.priceBps;
+            const takerNotional = takerPerShareBps * LAMPORTS_PER_BP * Number(qty);
+            const feeLamports = Math.ceil((takerNotional * marketData.feeBps) / PRICE_SCALE);
             await store.insertFill({
                 market: incoming.market,
                 fillSeq: null,
@@ -413,7 +433,7 @@ export async function matchAndSettle(orderHash: string): Promise<MatchOutcome> {
                 priceBps: match.resting.priceBps,
                 quantity: Number(qty),
                 notionalLamports: match.resting.priceBps * LAMPORTS_PER_BP * Number(qty),
-                feeLamports: 0, // exact fee readable from tx logs; UI shows quote-side estimate
+                feeLamports,
                 txSignature,
                 createdAt: Date.now(),
             });

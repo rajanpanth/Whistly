@@ -97,15 +97,18 @@ async function deposit(kp, lam) {
     data: Buffer.concat([disc("deposit_v2"), u64(lam)]),
   })], kp);
 }
-function encodeOrder(market, { maker, outcome, side, priceBps, quantity }) {
-  const buf = Buffer.alloc(106);
-  buf.write("WV2O", 0, "ascii"); buf[4] = 2;
+// V3 payload (110 bytes): appends u32 created_ts so the program enforces
+// maker priority (maker.created_ts <= taker.created_ts).
+function encodeOrder(market, { maker, outcome, side, priceBps, quantity, createdTs }) {
+  const buf = Buffer.alloc(110);
+  buf.write("WV2O", 0, "ascii"); buf[4] = 3;
   market.toBuffer().copy(buf, 5); maker.toBuffer().copy(buf, 37);
   buf[69] = outcome; buf[70] = side; buf.writeUInt16LE(priceBps, 71);
   buf.writeBigUInt64LE(BigInt(quantity), 73);
   buf.writeBigUInt64LE(BigInt(Date.now() * 1000 + Math.floor(Math.random() * 1000)), 81);
   buf.writeBigInt64LE(BigInt(Math.floor(Date.now() / 1000) + 86400), 89);
   buf[97] = 0; buf.writeBigUInt64LE(BigInt(Math.floor(Math.random() * 1e12)), 98);
+  buf.writeUInt32LE(createdTs ?? Math.floor(Date.now() / 1000), 106);
   return buf;
 }
 async function postOrder(market, kp, o, orderType = "LIMIT") {

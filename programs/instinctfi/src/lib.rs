@@ -259,6 +259,21 @@ pub mod instinctfi {
         v2::resolve::force_void_market_v2(ctx)
     }
 
+    /// Propose the winning outcome of a data-resolved market (admin).
+    /// Finalizable by anyone after the dispute window; re-proposing
+    /// overwrites and restarts the window.
+    pub fn propose_settle_market_v2(
+        ctx: Context<ProposeSettleMarketV2>,
+        winning_outcome: u8,
+    ) -> Result<()> {
+        v2::resolve::propose_settle_market_v2(ctx, winning_outcome)
+    }
+
+    /// Finalize a proposed settlement after the dispute window (permissionless).
+    pub fn finalize_settle_market_v2(ctx: Context<FinalizeSettleMarketV2>) -> Result<()> {
+        v2::resolve::finalize_settle_market_v2(ctx)
+    }
+
     /// Redeem a position after settlement or void.
     pub fn redeem_v2(ctx: Context<RedeemV2>) -> Result<()> {
         v2::resolve::redeem_v2(ctx)

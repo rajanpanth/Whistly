@@ -70,4 +70,14 @@ pub enum ErrorV2 {
     VoidNotAllowed,
     #[msg("V2: force-void grace period has not elapsed")]
     GraceNotElapsed,
+    #[msg("V2: maker must be the earlier order (signed timestamp priority)")]
+    MakerPriorityViolated,
+    #[msg("V2: FOK/FAK orders cannot be the maker side of a fill")]
+    InvalidMakerTif,
+    #[msg("V2: this market resolves from data - use propose/finalize settlement")]
+    UseProposedSettlement,
+    #[msg("V2: dispute window has not elapsed")]
+    DisputeWindowActive,
+    #[msg("V2: no settlement proposal exists")]
+    NoProposal,
 }
