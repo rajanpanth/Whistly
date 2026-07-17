@@ -1,0 +1,1040 @@
+-- ============================================================
+-- Whistly — Supabase Database Schema  (v2 — atomic RPCs + tighter RLS)
+-- Run this in your Supabase SQL Editor (supabase.com → project → SQL Editor)
+--
+-- NOTE: If upgrading from v1, run the "Migration" section at the bottom
+--       separately AFTER the initial tables exist.
+-- ============================================================
+-- rajan
+-- 1. Users table
+create table if not exists users (
+  wallet text primary key,
+  balance bigint not null default 5000000000,
+  signup_bonus_claimed boolean not null default true,
+  last_weekly_reward_ts bigint not null default 0,
+  total_votes_cast bigint not null default 0,
+  total_polls_voted bigint not null default 0,
+  polls_won bigint not null default 0,
+  polls_created bigint not null default 0,
+  total_spent_cents bigint not null default 0,
+  total_winnings_cents bigint not null default 0,
+  weekly_winnings_cents bigint not null default 0,
+  monthly_winnings_cents bigint not null default 0,
+  weekly_spent_cents bigint not null default 0,
+  monthly_spent_cents bigint not null default 0,
+  weekly_votes_cast bigint not null default 0,
+  monthly_votes_cast bigint not null default 0,
+  weekly_polls_won bigint not null default 0,
+  monthly_polls_won bigint not null default 0,
+  weekly_polls_voted bigint not null default 0,
+  monthly_polls_voted bigint not null default 0,
+  creator_earnings_cents bigint not null default 0,
+  weekly_reset_ts bigint not null default 0,
+  monthly_reset_ts bigint not null default 0,
+  created_at bigint not null default 0
+);
+
+-- 2. Polls table
+create table if not exists polls (
+  id text primary key,
+  poll_id bigint not null default 0,
+  creator text not null,
+  title text not null,
+  description text not null default '',
+  category text not null default '',
+  image_url text not null default '',
+  option_images text[] not null default '{}',
+  options text[] not null,
+  vote_counts bigint[] not null,
+  unit_price_cents bigint not null,
+  end_time bigint not null,
+  total_pool_cents bigint not null default 0,
+  creator_investment_cents bigint not null default 0,
+  platform_fee_cents bigint not null default 0,
+  creator_reward_cents bigint not null default 0,
+  status smallint not null default 0,
+  winning_option smallint not null default 255,
+  total_voters bigint not null default 0,
+  market_kind smallint not null default 0,
+  created_at bigint not null default 0
+);
+
+-- 3. Votes table
+create table if not exists votes (
+  id uuid default gen_random_uuid() primary key,
+  poll_id text not null references polls(id) on delete cascade,
+  voter text not null,
+  votes_per_option bigint[] not null,
+  total_staked_cents bigint not null default 0,
+  claimed boolean not null default false,
+  unique(poll_id, voter)
+);
+
+-- ============================================================
+-- 4. Row Level Security
+--    Since we use the Supabase anon key without Supabase Auth,
+--    we cannot use auth.uid(). Instead we funnel ALL writes through
+--    SECURITY DEFINER RPCs below, and allow only SELECT via RLS.
+--
+--    For a production deployment you should add an Edge Function
+--    layer that verifies wallet signatures and creates custom JWTs.
+-- ============================================================
+alter table users enable row level security;
+alter table polls enable row level security;
+alter table votes enable row level security;
+
+-- Drop old wide-open policies if upgrading
+drop policy if exists "Allow all on users" on users;
+drop policy if exists "Allow all on polls"  on polls;
+drop policy if exists "Allow all on votes"  on votes;
+drop policy if exists "Users read"   on users;
+drop policy if exists "Polls read"   on polls;
+drop policy if exists "Votes read"   on votes;
+drop policy if exists "Polls write"  on polls;
+drop policy if exists "Polls update" on polls;
+drop policy if exists "Polls delete" on polls;
+drop policy if exists "Votes write"  on votes;
+drop policy if exists "Votes update" on votes;
+drop policy if exists "Users insert" on users;
+drop policy if exists "Users update" on users;
+
+-- SELECT only for the anon role
+create policy "Users read" on users for select using (true);
+create policy "Polls read" on polls for select using (true);
+create policy "Votes read" on votes for select using (true);
+
+-- No direct writes for anon role — ALL mutations go through SECURITY DEFINER RPCs.
+-- This prevents any client from modifying balances, votes, or polls directly.
+-- The RPCs below handle all write operations with proper validation.
+
+-- 5. Enable Realtime on all tables
+alter table users replica identity full;
+alter table polls replica identity full;
+alter table votes replica identity full;
+
+do $$ begin
+  alter publication supabase_realtime add table users;
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  alter publication supabase_realtime add table polls;
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  alter publication supabase_realtime add table votes;
+exception when duplicate_object then null;
+end $$;
+
+-- ============================================================
+-- 6. RPC Functions — atomic balance & claim operations
+-- ============================================================
+
+-- 6a. Atomic signup: insert-if-not-exists, always returns the user record.
+-- p_initial_balance: Optional starting balance in lamports (e.g. the user's
+-- devnet wallet balance). Defaults to 5 SOL (5000000000) if not provided or 0.
+-- Only affects NEW users — existing users keep their current balance (ON CONFLICT DO NOTHING).
+create or replace function signup_user(p_wallet text, p_initial_balance bigint default 5000000000)
+returns json as $$
+declare
+  v_user record;
+  v_now bigint;
+  v_balance bigint;
+begin
+  v_now := (extract(epoch from now()) * 1000)::bigint;
+  -- Use the provided initial balance, but floor at 0
+  v_balance := greatest(coalesce(p_initial_balance, 5000000000), 0);
+
+  insert into users (wallet, balance, signup_bonus_claimed, last_weekly_reward_ts, created_at, weekly_reset_ts, monthly_reset_ts)
+  values (p_wallet, v_balance, true, v_now, v_now, v_now, v_now)
+  on conflict (wallet) do nothing;
+
+  select * into v_user from users where wallet = p_wallet;
+  return row_to_json(v_user);
+end;
+$$ language plpgsql security definer;
+
+-- 6b. Atomic daily reward claim ($100 every 24 h, server-enforced)
+create or replace function claim_daily_reward(p_wallet text)
+returns json as $$
+declare
+  v_user record;
+  v_now bigint;
+  v_day_ms bigint := 86400000;
+begin
+  v_now := (extract(epoch from now()) * 1000)::bigint;
+
+  select * into v_user from users where wallet = p_wallet for update;
+  if not found then
+    return json_build_object('success', false, 'error', 'user_not_found');
+  end if;
+
+  if v_now - v_user.last_weekly_reward_ts < v_day_ms then
+    return json_build_object(
+      'success', false,
+      'error', 'too_early',
+      'remaining_ms', v_day_ms - (v_now - v_user.last_weekly_reward_ts),
+      'last_claim_ts', v_user.last_weekly_reward_ts,
+      'balance', v_user.balance
+    );
+  end if;
+
+  update users
+    set balance = balance + 2000000000,
+        last_weekly_reward_ts = v_now
+    where wallet = p_wallet
+    returning * into v_user;
+
+  return json_build_object(
+    'success', true,
+    'new_balance', v_user.balance,
+    'last_claim_ts', v_user.last_weekly_reward_ts
+  );
+end;
+$$ language plpgsql security definer;
+
+-- 6c. Atomic balance deduction
+create or replace function spend_balance(p_wallet text, p_amount bigint)
+returns json as $$
+declare
+  v_user record;
+begin
+  select * into v_user from users where wallet = p_wallet for update;
+  if not found then
+    return json_build_object('success', false, 'error', 'user_not_found');
+  end if;
+
+  if v_user.balance < p_amount then
+    return json_build_object('success', false, 'error', 'insufficient_balance', 'balance', v_user.balance);
+  end if;
+
+  update users set balance = balance - p_amount where wallet = p_wallet
+    returning * into v_user;
+
+  return json_build_object('success', true, 'new_balance', v_user.balance);
+end;
+$$ language plpgsql security definer;
+
+-- 6d. Atomic balance credit
+create or replace function credit_balance(p_wallet text, p_amount bigint)
+returns json as $$
+declare
+  v_user record;
+begin
+  update users set balance = balance + p_amount where wallet = p_wallet
+    returning * into v_user;
+
+  if not found then
+    return json_build_object('success', false, 'error', 'user_not_found');
+  end if;
+
+  return json_build_object('success', true, 'new_balance', v_user.balance);
+end;
+$$ language plpgsql security definer;
+
+-- ============================================================
+-- 7. Atomic cast_vote
+--    Deducts balance + increments vote_counts + upserts vote in one TX
+-- ============================================================
+create or replace function cast_vote_atomic(
+  p_wallet text,
+  p_poll_id text,
+  p_option_index int,   -- 0-based from the client
+  p_num_coins int
+)
+returns json as $$
+declare
+  v_user record;
+  v_poll record;
+  v_vote record;
+  v_cost bigint;
+  v_new_vote_counts bigint[];
+  v_new_vpo bigint[];
+  v_is_first_vote boolean := false;
+  v_pg_idx int;          -- 1-based for Postgres arrays
+  i int;
+  v_now_ms bigint;       -- current time in ms for period resets
+  v_week_ms bigint := 604800000;  -- 7 days in ms
+  v_month_ms bigint := 2592000000; -- 30 days in ms
+begin
+  v_pg_idx := p_option_index + 1;
+
+  select * into v_user from users where wallet = p_wallet for update;
+  if not found then
+    return json_build_object('success', false, 'error', 'user_not_found');
+  end if;
+
+  select * into v_poll from polls where id = p_poll_id for update;
+  if not found then
+    return json_build_object('success', false, 'error', 'poll_not_found');
+  end if;
+
+  if v_poll.status != 0 then
+    return json_build_object('success', false, 'error', 'poll_not_active');
+  end if;
+
+  -- end_time is in SECONDS
+  if (extract(epoch from now()))::bigint > v_poll.end_time then
+    return json_build_object('success', false, 'error', 'poll_ended');
+  end if;
+
+  if v_pg_idx < 1 or v_pg_idx > array_length(v_poll.options, 1) then
+    return json_build_object('success', false, 'error', 'invalid_option');
+  end if;
+
+  if v_poll.creator = p_wallet then
+    return json_build_object('success', false, 'error', 'creator_cannot_vote');
+  end if;
+
+  v_cost := p_num_coins::bigint * v_poll.unit_price_cents;
+
+  if v_user.balance < v_cost then
+    return json_build_object('success', false, 'error', 'insufficient_balance', 'balance', v_user.balance);
+  end if;
+
+  -- Deduct balance
+  update users set balance = balance - v_cost where wallet = p_wallet;
+
+  -- Increment vote_counts
+  v_new_vote_counts := v_poll.vote_counts;
+  v_new_vote_counts[v_pg_idx] := coalesce(v_new_vote_counts[v_pg_idx], 0) + p_num_coins;
+
+  -- Check existing vote
+  select * into v_vote from votes where poll_id = p_poll_id and voter = p_wallet for update;
+
+  if found then
+    v_new_vpo := v_vote.votes_per_option;
+    v_new_vpo[v_pg_idx] := coalesce(v_new_vpo[v_pg_idx], 0) + p_num_coins;
+    update votes
+      set votes_per_option = v_new_vpo,
+          total_staked_cents = total_staked_cents + v_cost
+      where poll_id = p_poll_id and voter = p_wallet;
+  else
+    v_is_first_vote := true;
+    v_new_vpo := array_fill(0::bigint, array[array_length(v_poll.options, 1)]);
+    v_new_vpo[v_pg_idx] := p_num_coins;
+    insert into votes (poll_id, voter, votes_per_option, total_staked_cents, claimed)
+      values (p_poll_id, p_wallet, v_new_vpo, v_cost, false);
+  end if;
+
+  update polls
+    set vote_counts = v_new_vote_counts,
+        total_pool_cents = total_pool_cents + v_cost,
+        total_voters = total_voters + (case when v_is_first_vote then 1 else 0 end)
+    where id = p_poll_id;
+
+  -- ── Inline period reset before incrementing weekly/monthly counters ──
+  -- If the user's weekly/monthly reset_ts is expired, zero out those counters first.
+  -- This ensures leaderboard data stays fresh without needing a cron job.
+  v_now_ms := (extract(epoch from now()) * 1000)::bigint;
+
+  if v_user.weekly_reset_ts < (v_now_ms - v_week_ms) then
+    update users
+      set weekly_winnings_cents = 0, weekly_spent_cents = 0,
+          weekly_votes_cast = 0, weekly_polls_won = 0, weekly_polls_voted = 0,
+          weekly_reset_ts = v_now_ms
+      where wallet = p_wallet;
+  end if;
+
+  if v_user.monthly_reset_ts < (v_now_ms - v_month_ms) then
+    update users
+      set monthly_winnings_cents = 0, monthly_spent_cents = 0,
+          monthly_votes_cast = 0, monthly_polls_won = 0, monthly_polls_voted = 0,
+          monthly_reset_ts = v_now_ms
+      where wallet = p_wallet;
+  end if;
+
+  update users
+    set total_votes_cast  = total_votes_cast + p_num_coins,
+        total_polls_voted = total_polls_voted + (case when v_is_first_vote then 1 else 0 end),
+        total_spent_cents  = total_spent_cents + v_cost,
+        weekly_votes_cast  = weekly_votes_cast + p_num_coins,
+        monthly_votes_cast = monthly_votes_cast + p_num_coins,
+        weekly_spent_cents = weekly_spent_cents + v_cost,
+        monthly_spent_cents = monthly_spent_cents + v_cost,
+        weekly_polls_voted = weekly_polls_voted + (case when v_is_first_vote then 1 else 0 end),
+        monthly_polls_voted = monthly_polls_voted + (case when v_is_first_vote then 1 else 0 end)
+    where wallet = p_wallet;
+
+  select balance into v_user from users where wallet = p_wallet;
+
+  return json_build_object(
+    'success', true,
+    'new_balance', v_user.balance,
+    'cost', v_cost,
+    'is_first_vote', v_is_first_vote
+  );
+end;
+$$ language plpgsql security definer;
+
+
+-- ============================================================
+-- 8. Atomic settle_poll — winner determination + creator payout
+-- ============================================================
+create or replace function settle_poll_atomic(p_wallet text, p_poll_id text)
+returns json as $$
+declare
+  v_poll record;
+  v_max_votes bigint := 0;
+  v_winning_idx int := 0;
+  v_total_votes bigint := 0;
+  v_creator_credit bigint;
+  v_is_admin boolean;
+  i int;
+begin
+  select * into v_poll from polls where id = p_poll_id for update;
+  if not found then
+    return json_build_object('success', false, 'error', 'poll_not_found');
+  end if;
+
+  if v_poll.status != 0 then
+    return json_build_object('success', false, 'error', 'already_settled');
+  end if;
+
+  -- Authorization: only creator or admin can settle
+  v_is_admin := EXISTS (SELECT 1 FROM admin_wallets WHERE wallet = p_wallet);
+  if v_poll.creator != p_wallet and not v_is_admin then
+    return json_build_object('success', false, 'error', 'not_authorized');
+  end if;
+
+  for i in 1..coalesce(array_length(v_poll.vote_counts, 1), 0) loop
+    v_total_votes := v_total_votes + v_poll.vote_counts[i];
+    if v_poll.vote_counts[i] > v_max_votes then
+      v_max_votes := v_poll.vote_counts[i];
+      v_winning_idx := i - 1;   -- 0-based to match frontend convention
+    end if;
+  end loop;
+
+  -- No votes → winning_option = 255
+  if v_total_votes = 0 then
+    v_winning_idx := 255;
+  end if;
+
+  update polls
+    set status = 1,
+        winning_option = v_winning_idx
+    where id = p_poll_id;
+
+  -- Credit creator: reward + platform fee
+  v_creator_credit := v_poll.creator_reward_cents + v_poll.platform_fee_cents;
+  if v_creator_credit > 0 then
+    update users
+      set balance = balance + v_creator_credit,
+          creator_earnings_cents = creator_earnings_cents + v_poll.creator_reward_cents
+      where wallet = v_poll.creator;
+  end if;
+
+  return json_build_object(
+    'success', true,
+    'winning_option', v_winning_idx,
+    'total_votes', v_total_votes,
+    'creator_reward', v_poll.creator_reward_cents,
+    'platform_fee', v_poll.platform_fee_cents
+  );
+end;
+$$ language plpgsql security definer;
+
+
+-- ============================================================
+-- 9. Atomic claim_reward — eligibility check + balance credit + mark claimed
+-- ============================================================
+create or replace function claim_reward_atomic(p_wallet text, p_poll_id text)
+returns json as $$
+declare
+  v_poll record;
+  v_vote record;
+  v_user record;
+  v_user_winning_votes bigint;
+  v_total_winning_votes bigint;
+  v_reward bigint;
+  v_now_ms bigint;
+  v_week_ms bigint := 604800000;
+  v_month_ms bigint := 2592000000;
+begin
+  select * into v_poll from polls where id = p_poll_id;
+  if not found then
+    return json_build_object('success', false, 'error', 'poll_not_found');
+  end if;
+
+  if v_poll.status != 1 then
+    return json_build_object('success', false, 'error', 'poll_not_settled');
+  end if;
+
+  if v_poll.winning_option = 255 then
+    return json_build_object('success', false, 'error', 'no_winner');
+  end if;
+
+  select * into v_vote from votes where poll_id = p_poll_id and voter = p_wallet for update;
+  if not found then
+    return json_build_object('success', false, 'error', 'no_vote_found');
+  end if;
+
+  if v_vote.claimed then
+    return json_build_object('success', false, 'error', 'already_claimed');
+  end if;
+
+  -- winning_option is 0-based from frontend, convert to 1-based for Postgres arrays
+  v_user_winning_votes := v_vote.votes_per_option[v_poll.winning_option + 1];
+  if v_user_winning_votes is null or v_user_winning_votes = 0 then
+    return json_build_object('success', false, 'error', 'did_not_win');
+  end if;
+
+  v_total_winning_votes := v_poll.vote_counts[v_poll.winning_option + 1];
+  -- Use NUMERIC division + FLOOR to prevent rounding loss/leak
+  v_reward := floor((v_user_winning_votes::numeric * v_poll.total_pool_cents::numeric) / v_total_winning_votes::numeric)::bigint;
+
+  -- ── Inline period reset before incrementing weekly/monthly counters ──
+  select * into v_user from users where wallet = p_wallet;
+  v_now_ms := (extract(epoch from now()) * 1000)::bigint;
+
+  if v_user.weekly_reset_ts < (v_now_ms - v_week_ms) then
+    update users
+      set weekly_winnings_cents = 0, weekly_spent_cents = 0,
+          weekly_votes_cast = 0, weekly_polls_won = 0, weekly_polls_voted = 0,
+          weekly_reset_ts = v_now_ms
+      where wallet = p_wallet;
+  end if;
+
+  if v_user.monthly_reset_ts < (v_now_ms - v_month_ms) then
+    update users
+      set monthly_winnings_cents = 0, monthly_spent_cents = 0,
+          monthly_votes_cast = 0, monthly_polls_won = 0, monthly_polls_voted = 0,
+          monthly_reset_ts = v_now_ms
+      where wallet = p_wallet;
+  end if;
+
+  update users
+    set balance = balance + v_reward,
+        total_winnings_cents = total_winnings_cents + v_reward,
+        weekly_winnings_cents = weekly_winnings_cents + v_reward,
+        monthly_winnings_cents = monthly_winnings_cents + v_reward,
+        polls_won = polls_won + 1,
+        weekly_polls_won = weekly_polls_won + 1,
+        monthly_polls_won = monthly_polls_won + 1
+    where wallet = p_wallet;
+
+  update votes set claimed = true where poll_id = p_poll_id and voter = p_wallet;
+
+  return json_build_object(
+    'success', true,
+    'reward', v_reward
+  );
+end;
+$$ language plpgsql security definer;
+
+-- ============================================================
+-- 5. Comments table (for poll discussion threads)
+-- ============================================================
+create table if not exists comments (
+  id uuid primary key default gen_random_uuid(),
+  poll_id text not null references polls(id) on delete cascade,
+  wallet text not null,
+  text text not null check (char_length(text) between 1 and 500),
+  created_at timestamptz not null default now()
+);
+
+create index if not exists idx_comments_poll_id on comments(poll_id);
+create index if not exists idx_comments_created_at on comments(created_at desc);
+
+-- RLS
+alter table comments enable row level security;
+
+drop policy if exists "Anyone can read comments" on comments;
+create policy "Anyone can read comments"
+  on comments for select using (true);
+
+-- Comments are inserted via RPC — no direct inserts from anon role
+
+-- Enable realtime for comments
+do $$ begin
+  alter publication supabase_realtime add table comments;
+exception when duplicate_object then null;
+end $$;
+
+-- ============================================================
+-- Referrals table
+-- ============================================================
+create table if not exists referrals (
+  referee text primary key,          -- the user who was referred (one referrer per user)
+  referrer text not null,            -- the user who shared the link
+  created_at bigint not null default 0
+);
+
+create index if not exists idx_referrals_referrer on referrals(referrer);
+
+alter table referrals enable row level security;
+
+drop policy if exists "Anyone can read referrals" on referrals;
+create policy "Anyone can read referrals"
+  on referrals for select using (true);
+
+-- Referrals are inserted via RPC — no direct inserts from anon role
+
+-- ============================================================
+-- Resolution proofs table
+-- ============================================================
+create table if not exists resolution_proofs (
+  poll_id text primary key references polls(id) on delete cascade,
+  source_url text not null,
+  created_at bigint not null default (extract(epoch from now()) * 1000)::bigint
+);
+
+alter table resolution_proofs enable row level security;
+
+drop policy if exists "Anyone can read resolution proofs" on resolution_proofs;
+create policy "Anyone can read resolution proofs"
+  on resolution_proofs for select using (true);
+
+-- Resolution proofs are inserted via RPC — no direct inserts from anon role
+
+-- ============================================================
+-- Live Goal Market metadata
+-- ============================================================
+create table if not exists live_goal_markets (
+  id text primary key,
+  onchain_market_pubkey text not null references polls(id) on delete cascade,
+  onchain_poll_id bigint not null,
+  txodds_fixture_id text not null,
+  market_kind text not null default 'LIVE_GOAL_WINDOW',
+  home_team text not null,
+  away_team text not null,
+  match_clock_at_start text not null,
+  window_minutes smallint not null check (window_minutes in (5, 15, 45)),
+  window_start_ts bigint not null,
+  lock_ts bigint not null,
+  window_end_ts bigint not null,
+  start_home_score smallint not null,
+  start_away_score smallint not null,
+  end_home_score smallint,
+  end_away_score smallint,
+  status text not null default 'OPEN',
+  winning_outcome text,
+  winning_option_index smallint,
+  settlement_tx text,
+  resolution_source text not null default 'MOCK',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_live_goal_markets_fixture on live_goal_markets(txodds_fixture_id);
+create index if not exists idx_live_goal_markets_status on live_goal_markets(status);
+
+alter table live_goal_markets enable row level security;
+
+drop policy if exists "Anyone can read live goal markets" on live_goal_markets;
+create policy "Anyone can read live goal markets"
+  on live_goal_markets for select using (true);
+
+-- Demo writes use Next.js API routes. Production should add SECURITY DEFINER RPCs
+-- with wallet/admin verification before enabling direct writes.
+
+-- ============================================================
+-- 10. Atomic create_poll — validates and inserts poll + deducts creator balance
+-- ============================================================
+create or replace function create_poll_atomic(
+  p_wallet text,
+  p_id text,
+  p_poll_id bigint,
+  p_title text,
+  p_description text,
+  p_category text,
+  p_image_url text,
+  p_option_images text[],
+  p_options text[],
+  p_unit_price_cents bigint,
+  p_end_time bigint,
+  p_creator_investment_cents bigint,
+  p_market_kind smallint default 0
+)
+returns json as $$
+declare
+  v_user record;
+  v_platform_fee bigint;
+  v_creator_reward bigint;
+  v_pool_seed bigint;
+  v_now bigint;
+begin
+  v_now := (extract(epoch from now()))::bigint;
+
+  -- ── Input validation ──
+  if char_length(p_title) < 1 or char_length(p_title) > 200 then
+    return json_build_object('success', false, 'error', 'title_invalid_length');
+  end if;
+
+  if array_length(p_options, 1) is null or array_length(p_options, 1) < 2 then
+    return json_build_object('success', false, 'error', 'need_at_least_2_options');
+  end if;
+
+  if p_end_time <= v_now then
+    return json_build_object('success', false, 'error', 'end_time_must_be_future');
+  end if;
+
+  if p_unit_price_cents <= 0 then
+    return json_build_object('success', false, 'error', 'unit_price_must_be_positive');
+  end if;
+
+  if p_creator_investment_cents <= 0 then
+    return json_build_object('success', false, 'error', 'investment_must_be_positive');
+  end if;
+
+  if p_market_kind not in (0, 1) then
+    return json_build_object('success', false, 'error', 'invalid_market_kind');
+  end if;
+
+  select * into v_user from users where wallet = p_wallet for update;
+  if not found then
+    return json_build_object('success', false, 'error', 'user_not_found');
+  end if;
+
+  if v_user.balance < p_creator_investment_cents then
+    return json_build_object('success', false, 'error', 'insufficient_balance', 'balance', v_user.balance);
+  end if;
+
+  -- Fee math
+  v_platform_fee := greatest(p_creator_investment_cents / 100, 1);
+  v_creator_reward := greatest(p_creator_investment_cents / 100, 1);
+  v_pool_seed := p_creator_investment_cents - v_platform_fee - v_creator_reward;
+
+  -- Deduct balance
+  update users
+    set balance = balance - p_creator_investment_cents,
+        polls_created = polls_created + 1,
+        total_spent_cents = total_spent_cents + p_creator_investment_cents
+    where wallet = p_wallet;
+
+  -- Insert poll
+  insert into polls (
+    id, poll_id, creator, title, description, category, image_url, option_images,
+    options, vote_counts, unit_price_cents, end_time, total_pool_cents,
+    creator_investment_cents, platform_fee_cents, creator_reward_cents,
+    status, winning_option, total_voters, market_kind, created_at
+  ) values (
+    p_id, p_poll_id, p_wallet, p_title, p_description, p_category, p_image_url, p_option_images,
+    p_options, array_fill(0::bigint, array[array_length(p_options, 1)]),
+    p_unit_price_cents, p_end_time, v_pool_seed,
+    p_creator_investment_cents, v_platform_fee, v_creator_reward,
+    0, 255, 0, p_market_kind, v_now
+  );
+
+  select balance into v_user from users where wallet = p_wallet;
+
+  return json_build_object(
+    'success', true,
+    'new_balance', v_user.balance,
+    'platform_fee', v_platform_fee,
+    'creator_reward', v_creator_reward,
+    'pool_seed', v_pool_seed
+  );
+end;
+$$ language plpgsql security definer;
+
+-- ============================================================
+-- 11. Atomic edit_poll — validates ownership & state before editing
+-- ============================================================
+-- 10b. Admin wallets config table
+-- ============================================================
+create table if not exists admin_wallets (
+  wallet text primary key
+);
+alter table admin_wallets enable row level security;
+drop policy if exists "Anyone can read admin_wallets" on admin_wallets;
+create policy "Anyone can read admin_wallets" on admin_wallets for select using (true);
+-- Seed with the initial admin wallet
+insert into admin_wallets (wallet) values ('62PFLSvnG4Zp8jYS9AFymETvV5e8xBA2JBW2UhjqyNmS')
+  on conflict do nothing;
+
+-- ============================================================
+-- 11. Atomic edit_poll — validates ownership/admin, updates poll
+-- ============================================================
+create or replace function edit_poll_atomic(
+  p_wallet text,
+  p_poll_id text,
+  p_title text,
+  p_description text,
+  p_category text,
+  p_image_url text,
+  p_option_images text[],
+  p_options text[],
+  p_end_time bigint
+)
+returns json as $$
+declare
+  v_poll record;
+  v_total_votes bigint := 0;
+  v_is_admin boolean;
+  i int;
+begin
+  -- Check admin status from admin_wallets table
+  v_is_admin := EXISTS (SELECT 1 FROM admin_wallets WHERE wallet = p_wallet);
+
+  select * into v_poll from polls where id = p_poll_id for update;
+  if not found then
+    return json_build_object('success', false, 'error', 'poll_not_found');
+  end if;
+
+  -- Non-admin restrictions
+  if not v_is_admin then
+    if v_poll.creator != p_wallet then
+      return json_build_object('success', false, 'error', 'not_creator');
+    end if;
+
+    if v_poll.status != 0 then
+      return json_build_object('success', false, 'error', 'poll_not_active');
+    end if;
+
+    -- Check no votes have been cast
+    for i in 1..coalesce(array_length(v_poll.vote_counts, 1), 0) loop
+      v_total_votes := v_total_votes + v_poll.vote_counts[i];
+    end loop;
+
+    if v_total_votes > 0 then
+      return json_build_object('success', false, 'error', 'poll_has_votes');
+    end if;
+  end if;
+
+  update polls
+    set title = p_title,
+        description = p_description,
+        category = p_category,
+        image_url = p_image_url,
+        option_images = p_option_images,
+        options = p_options,
+        end_time = p_end_time
+    where id = p_poll_id;
+
+  return json_build_object('success', true);
+end;
+$$ language plpgsql security definer;
+
+-- ============================================================
+-- 12. Atomic delete_poll — validates ownership, refunds balances, deletes poll+votes
+-- ============================================================
+create or replace function delete_poll_atomic(p_wallet text, p_poll_id text)
+returns json as $$
+declare
+  v_poll record;
+  v_total_votes bigint := 0;
+  v_vote record;
+  v_refund_total bigint := 0;
+  v_is_admin boolean := false;
+  i int;
+begin
+  select * into v_poll from polls where id = p_poll_id for update;
+  if not found then
+    return json_build_object('success', false, 'error', 'poll_not_found');
+  end if;
+
+  -- Check if caller is an admin
+  select exists(select 1 from admin_wallets where wallet = p_wallet) into v_is_admin;
+
+  -- Only creator or admin can delete
+  if v_poll.creator != p_wallet and not v_is_admin then
+    return json_build_object('success', false, 'error', 'not_creator');
+  end if;
+
+  if v_poll.status != 0 then
+    return json_build_object('success', false, 'error', 'poll_not_active');
+  end if;
+
+  for i in 1..coalesce(array_length(v_poll.vote_counts, 1), 0) loop
+    v_total_votes := v_total_votes + v_poll.vote_counts[i];
+  end loop;
+
+  -- Non-admin creators cannot delete polls with votes
+  if v_total_votes > 0 and not v_is_admin then
+    return json_build_object('success', false, 'error', 'poll_has_votes');
+  end if;
+
+  -- Refund all voters if poll has votes (admin force-delete)
+  if v_total_votes > 0 then
+    for v_vote in select * from votes where poll_id = p_poll_id loop
+      update users
+        set balance = balance + v_vote.total_staked_cents
+        where wallet = v_vote.voter;
+      v_refund_total := v_refund_total + v_vote.total_staked_cents;
+    end loop;
+  end if;
+
+  -- Refund creator investment
+  update users
+    set balance = balance + v_poll.creator_investment_cents,
+        total_spent_cents = greatest(0, total_spent_cents - v_poll.creator_investment_cents),
+        polls_created = greatest(0, polls_created - 1)
+    where wallet = v_poll.creator;
+
+  -- Delete votes (cascade would handle this, but be explicit)
+  delete from votes where poll_id = p_poll_id;
+
+  -- Delete poll
+  delete from polls where id = p_poll_id;
+
+  return json_build_object('success', true, 'refund', v_poll.creator_investment_cents, 'voter_refund', v_refund_total);
+end;
+$$ language plpgsql security definer;
+
+-- ============================================================
+-- 13. Atomic insert_comment — rate-limited, sanitized comment insert
+-- ============================================================
+create or replace function insert_comment_atomic(
+  p_wallet text,
+  p_poll_id text,
+  p_text text
+)
+returns json as $$
+declare
+  v_poll record;
+  v_last_comment timestamptz;
+  v_comment_id uuid;
+begin
+  -- Validate poll exists
+  select * into v_poll from polls where id = p_poll_id;
+  if not found then
+    return json_build_object('success', false, 'error', 'poll_not_found');
+  end if;
+
+  -- Validate text length
+  if char_length(p_text) < 1 or char_length(p_text) > 500 then
+    return json_build_object('success', false, 'error', 'invalid_comment_length');
+  end if;
+
+  -- Server-side rate limiting: 1 comment per 30 seconds per user per poll
+  select max(created_at) into v_last_comment
+    from comments
+    where wallet = p_wallet and poll_id = p_poll_id;
+
+  if v_last_comment is not null and (now() - v_last_comment) < interval '30 seconds' then
+    return json_build_object('success', false, 'error', 'rate_limited');
+  end if;
+
+  insert into comments (poll_id, wallet, text)
+    values (p_poll_id, p_wallet, p_text)
+    returning id into v_comment_id;
+
+  return json_build_object('success', true, 'id', v_comment_id);
+end;
+$$ language plpgsql security definer;
+
+-- ============================================================
+-- 14. Atomic insert_referral
+-- ============================================================
+create or replace function insert_referral_atomic(
+  p_referrer text,
+  p_referee text
+)
+returns json as $$
+begin
+  if p_referrer = p_referee then
+    return json_build_object('success', false, 'error', 'self_referral');
+  end if;
+
+  insert into referrals (referrer, referee, created_at)
+    values (p_referrer, p_referee, (extract(epoch from now()) * 1000)::bigint)
+    on conflict (referee) do nothing;
+
+  return json_build_object('success', true);
+end;
+$$ language plpgsql security definer;
+
+-- ============================================================
+-- 15. Atomic upsert_resolution_proof
+-- ============================================================
+create or replace function upsert_resolution_proof_atomic(
+  p_poll_id text,
+  p_source_url text
+)
+returns json as $$
+begin
+  insert into resolution_proofs (poll_id, source_url)
+    values (p_poll_id, p_source_url)
+    on conflict (poll_id) do update set source_url = excluded.source_url;
+
+  return json_build_object('success', true);
+end;
+$$ language plpgsql security definer;
+
+-- ============================================================
+-- 16. User Profiles table (display names + avatars)
+-- ============================================================
+create table if not exists user_profiles (
+  wallet text primary key,
+  display_name text not null default '',
+  avatar_url text not null default '',
+  created_at bigint not null default 0
+);
+
+-- RLS
+alter table user_profiles enable row level security;
+
+drop policy if exists "Anyone can read user_profiles" on user_profiles;
+create policy "Anyone can read user_profiles"
+  on user_profiles for select using (true);
+
+-- No direct writes — use RPC below
+
+-- Realtime
+alter table user_profiles replica identity full;
+do $$ begin
+  alter publication supabase_realtime add table user_profiles;
+exception when duplicate_object then null;
+end $$;
+
+-- ============================================================
+-- 17. Atomic upsert_user_profile
+-- ============================================================
+create or replace function upsert_user_profile_atomic(
+  p_wallet text,
+  p_display_name text,
+  p_avatar_url text
+)
+returns json as $$
+declare
+  v_now bigint;
+begin
+  v_now := (extract(epoch from now()) * 1000)::bigint;
+
+  insert into user_profiles (wallet, display_name, avatar_url, created_at)
+    values (p_wallet, p_display_name, p_avatar_url, v_now)
+    on conflict (wallet) do update
+      set display_name = excluded.display_name,
+          avatar_url   = excluded.avatar_url;
+
+  return json_build_object('success', true);
+end;
+$$ language plpgsql security definer;
+
+-- ============================================================
+-- 18. Performance Indexes
+-- ============================================================
+-- These indexes speed up common query patterns used by the app.
+create index if not exists idx_votes_voter on votes(voter);
+create index if not exists idx_votes_poll_id on votes(poll_id);
+create index if not exists idx_polls_creator on polls(creator);
+create index if not exists idx_polls_status on polls(status);
+create index if not exists idx_polls_created_at on polls(created_at desc);
+create index if not exists idx_comments_poll_id on comments(poll_id);
+
+-- Leaderboard indexes for fast ORDER BY queries
+create index if not exists idx_users_total_winnings on users(total_winnings_cents desc);
+create index if not exists idx_users_weekly_winnings on users(weekly_winnings_cents desc);
+create index if not exists idx_users_monthly_winnings on users(monthly_winnings_cents desc);
+create index if not exists idx_users_polls_won on users(polls_won desc);
+create index if not exists idx_users_total_votes on users(total_votes_cast desc);
+create index if not exists idx_users_creator_earnings on users(creator_earnings_cents desc);
+
+-- ============================================================
+-- TODO: Weekly/Monthly Reset Cron Job
+-- ============================================================
+-- The users table has weekly_reset_ts, monthly_reset_ts, weekly_winnings_cents,
+-- monthly_winnings_cents, weekly_spent_cents, and monthly_spent_cents columns.
+-- These are currently only reset client-side via withFreshPeriods() in dataConverters.ts.
+--
+-- For accurate leaderboards, set up a Supabase Edge Function cron job or pg_cron:
+--
+-- Weekly (every Monday at 00:00 UTC):
+--   UPDATE users SET weekly_winnings_cents = 0, weekly_spent_cents = 0,
+--     weekly_reset_ts = (extract(epoch from now()) * 1000)::bigint
+--     WHERE weekly_reset_ts < (extract(epoch from now()) * 1000)::bigint - 604800000;
+--
+-- Monthly (1st of each month at 00:00 UTC):
+--   UPDATE users SET monthly_winnings_cents = 0, monthly_spent_cents = 0,
+--     monthly_reset_ts = (extract(epoch from now()) * 1000)::bigint
+--     WHERE monthly_reset_ts < (extract(epoch from now()) * 1000)::bigint - 2592000000;

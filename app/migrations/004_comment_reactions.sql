@@ -18,12 +18,15 @@ CREATE INDEX IF NOT EXISTS idx_reactions_wallet ON comment_reactions(wallet);
 -- RLS policies
 ALTER TABLE comment_reactions ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Anyone can read reactions" ON comment_reactions;
 CREATE POLICY "Anyone can read reactions"
   ON comment_reactions FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Authenticated users can insert reactions" ON comment_reactions;
 CREATE POLICY "Authenticated users can insert reactions"
   ON comment_reactions FOR INSERT WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Users can delete own reactions" ON comment_reactions;
 CREATE POLICY "Users can delete own reactions"
   ON comment_reactions FOR DELETE USING (true);
 

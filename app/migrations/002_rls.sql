@@ -19,6 +19,21 @@ ALTER TABLE IF EXISTS poll_images ENABLE ROW LEVEL SECURITY;
 
 -- ── 2. Polls ────────────────────────────────────────────────────────
 
+-- Idempotency: drop this file's policies first so re-runs never collide.
+DROP POLICY IF EXISTS "polls_select_all" ON polls;
+DROP POLICY IF EXISTS "polls_insert_auth" ON polls;
+DROP POLICY IF EXISTS "polls_update_owner" ON polls;
+DROP POLICY IF EXISTS "polls_delete_owner" ON polls;
+DROP POLICY IF EXISTS "votes_select_all" ON votes;
+DROP POLICY IF EXISTS "votes_insert_own" ON votes;
+DROP POLICY IF EXISTS "votes_update_own" ON votes;
+DROP POLICY IF EXISTS "comments_select_all" ON comments;
+DROP POLICY IF EXISTS "comments_insert_auth" ON comments;
+DROP POLICY IF EXISTS "comments_delete_own" ON comments;
+DROP POLICY IF EXISTS "users_select_all" ON users;
+DROP POLICY IF EXISTS "users_insert_own" ON users;
+DROP POLICY IF EXISTS "users_update_own" ON users;
+
 -- Anyone can read polls
 CREATE POLICY "polls_select_all" ON polls
   FOR SELECT USING (true);
@@ -31,21 +46,23 @@ CREATE POLICY "polls_insert_auth" ON polls
     current_setting('request.jwt.claims', true)::json->>'wallet' IS NOT NULL
   );
 
--- Only the poll creator or admin can update their polls
+-- Only the poll creator or an admin can update their polls.
+-- Admins come from the admin_wallets table (single source of truth) instead
+-- of a hardcoded pubkey that goes stale when the admin rotates.
 CREATE POLICY "polls_update_owner" ON polls
   FOR UPDATE USING (
     creator = current_setting('request.jwt.claims', true)::json->>'wallet'
     OR current_setting('request.jwt.claims', true)::json->>'wallet' IN (
-      '62PFLSvnG4Zp8jYS9AFymETvV5e8xBA2JBW2UhjqyNmS'
+      SELECT wallet FROM admin_wallets
     )
   );
 
--- Only the poll creator or admin can delete their polls
+-- Only the poll creator or an admin can delete their polls
 CREATE POLICY "polls_delete_owner" ON polls
   FOR DELETE USING (
     creator = current_setting('request.jwt.claims', true)::json->>'wallet'
     OR current_setting('request.jwt.claims', true)::json->>'wallet' IN (
-      '62PFLSvnG4Zp8jYS9AFymETvV5e8xBA2JBW2UhjqyNmS'
+      SELECT wallet FROM admin_wallets
     )
   );
 
@@ -103,34 +120,49 @@ CREATE POLICY "users_update_own" ON users
     wallet = current_setting('request.jwt.claims', true)::json->>'wallet'
   );
 
--- ── 6. Push Subscriptions ───────────────────────────────────────────
+-- ── 6. Push Subscriptions (legacy) ──────────────────────────────────
+-- The push_subscriptions table only exists in older projects (the app no
+-- longer references it). Policies are applied conditionally so this file
+-- runs cleanly on a fresh database.
+DO $$
+BEGIN
+  IF to_regclass('public.push_subscriptions') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS "push_subs_select_own" ON push_subscriptions';
+    EXECUTE 'DROP POLICY IF EXISTS "push_subs_insert_own" ON push_subscriptions';
+    EXECUTE 'DROP POLICY IF EXISTS "push_subs_delete_own" ON push_subscriptions';
+    -- Users can only read their own push subscriptions
+    EXECUTE 'CREATE POLICY "push_subs_select_own" ON push_subscriptions
+      FOR SELECT USING (
+        wallet = current_setting(''request.jwt.claims'', true)::json->>''wallet''
+      )';
+    -- BUG-14 FIX: Require authenticated JWT with wallet claim.
+    EXECUTE 'CREATE POLICY "push_subs_insert_own" ON push_subscriptions
+      FOR INSERT WITH CHECK (
+        current_setting(''request.jwt.claims'', true)::json->>''wallet'' IS NOT NULL
+      )';
+    -- Users can delete their own push subscriptions
+    EXECUTE 'CREATE POLICY "push_subs_delete_own" ON push_subscriptions
+      FOR DELETE USING (
+        wallet = current_setting(''request.jwt.claims'', true)::json->>''wallet''
+      )';
+  END IF;
+END $$;
 
--- Users can only read their own push subscriptions
-CREATE POLICY "push_subs_select_own" ON push_subscriptions
-  FOR SELECT USING (
-    wallet = current_setting('request.jwt.claims', true)::json->>'wallet'
-  );
-
--- BUG-14 FIX: Require authenticated JWT with wallet claim.
-CREATE POLICY "push_subs_insert_own" ON push_subscriptions
-  FOR INSERT WITH CHECK (
-    current_setting('request.jwt.claims', true)::json->>'wallet' IS NOT NULL
-  );
-
--- Users can delete their own push subscriptions
-CREATE POLICY "push_subs_delete_own" ON push_subscriptions
-  FOR DELETE USING (
-    wallet = current_setting('request.jwt.claims', true)::json->>'wallet'
-  );
-
--- ── 7. Poll Images ─────────────────────────────────────────────────
-
--- Anyone can read poll images
-CREATE POLICY "poll_images_select_all" ON poll_images
-  FOR SELECT USING (true);
-
--- BUG-14 FIX: Require authenticated JWT with wallet claim.
-CREATE POLICY "poll_images_insert_auth" ON poll_images
-  FOR INSERT WITH CHECK (
-    current_setting('request.jwt.claims', true)::json->>'wallet' IS NOT NULL
-  );
+-- ── 7. Poll Images (legacy) ─────────────────────────────────────────
+-- Poll images now live in the poll-images storage bucket; the poll_images
+-- table only exists in older projects. Conditional for fresh databases.
+DO $$
+BEGIN
+  IF to_regclass('public.poll_images') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS "poll_images_select_all" ON poll_images';
+    EXECUTE 'DROP POLICY IF EXISTS "poll_images_insert_auth" ON poll_images';
+    -- Anyone can read poll images
+    EXECUTE 'CREATE POLICY "poll_images_select_all" ON poll_images
+      FOR SELECT USING (true)';
+    -- BUG-14 FIX: Require authenticated JWT with wallet claim.
+    EXECUTE 'CREATE POLICY "poll_images_insert_auth" ON poll_images
+      FOR INSERT WITH CHECK (
+        current_setting(''request.jwt.claims'', true)::json->>''wallet'' IS NOT NULL
+      )';
+  END IF;
+END $$;

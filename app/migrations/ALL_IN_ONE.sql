@@ -1,3 +1,8 @@
+
+-- ============================================================
+-- >>> 001_schema.sql
+-- ============================================================
+
 -- ============================================================
 -- Whistly — Supabase Database Schema  (v2 — atomic RPCs + tighter RLS)
 -- Run this in your Supabase SQL Editor (supabase.com → project → SQL Editor)
@@ -112,9 +117,18 @@ alter table users replica identity full;
 alter table polls replica identity full;
 alter table votes replica identity full;
 
-alter publication supabase_realtime add table users;
-alter publication supabase_realtime add table polls;
-alter publication supabase_realtime add table votes;
+do $$ begin
+  alter publication supabase_realtime add table users;
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  alter publication supabase_realtime add table polls;
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  alter publication supabase_realtime add table votes;
+exception when duplicate_object then null;
+end $$;
 
 -- ============================================================
 -- 6. RPC Functions — atomic balance & claim operations
@@ -529,13 +543,17 @@ create index if not exists idx_comments_created_at on comments(created_at desc);
 -- RLS
 alter table comments enable row level security;
 
+drop policy if exists "Anyone can read comments" on comments;
 create policy "Anyone can read comments"
   on comments for select using (true);
 
 -- Comments are inserted via RPC — no direct inserts from anon role
 
 -- Enable realtime for comments
-alter publication supabase_realtime add table comments;
+do $$ begin
+  alter publication supabase_realtime add table comments;
+exception when duplicate_object then null;
+end $$;
 
 -- ============================================================
 -- Referrals table
@@ -550,6 +568,7 @@ create index if not exists idx_referrals_referrer on referrals(referrer);
 
 alter table referrals enable row level security;
 
+drop policy if exists "Anyone can read referrals" on referrals;
 create policy "Anyone can read referrals"
   on referrals for select using (true);
 
@@ -566,6 +585,7 @@ create table if not exists resolution_proofs (
 
 alter table resolution_proofs enable row level security;
 
+drop policy if exists "Anyone can read resolution proofs" on resolution_proofs;
 create policy "Anyone can read resolution proofs"
   on resolution_proofs for select using (true);
 
@@ -605,6 +625,7 @@ create index if not exists idx_live_goal_markets_status on live_goal_markets(sta
 
 alter table live_goal_markets enable row level security;
 
+drop policy if exists "Anyone can read live goal markets" on live_goal_markets;
 create policy "Anyone can read live goal markets"
   on live_goal_markets for select using (true);
 
@@ -720,6 +741,7 @@ create table if not exists admin_wallets (
   wallet text primary key
 );
 alter table admin_wallets enable row level security;
+drop policy if exists "Anyone can read admin_wallets" on admin_wallets;
 create policy "Anyone can read admin_wallets" on admin_wallets for select using (true);
 -- Seed with the initial admin wallet
 insert into admin_wallets (wallet) values ('62PFLSvnG4Zp8jYS9AFymETvV5e8xBA2JBW2UhjqyNmS')
@@ -947,6 +969,7 @@ create table if not exists user_profiles (
 -- RLS
 alter table user_profiles enable row level security;
 
+drop policy if exists "Anyone can read user_profiles" on user_profiles;
 create policy "Anyone can read user_profiles"
   on user_profiles for select using (true);
 
@@ -954,7 +977,10 @@ create policy "Anyone can read user_profiles"
 
 -- Realtime
 alter table user_profiles replica identity full;
-alter publication supabase_realtime add table user_profiles;
+do $$ begin
+  alter publication supabase_realtime add table user_profiles;
+exception when duplicate_object then null;
+end $$;
 
 -- ============================================================
 -- 17. Atomic upsert_user_profile
@@ -1017,3 +1043,760 @@ create index if not exists idx_users_creator_earnings on users(creator_earnings_
 --   UPDATE users SET monthly_winnings_cents = 0, monthly_spent_cents = 0,
 --     monthly_reset_ts = (extract(epoch from now()) * 1000)::bigint
 --     WHERE monthly_reset_ts < (extract(epoch from now()) * 1000)::bigint - 2592000000;
+
+-- ============================================================
+-- >>> 002_rls.sql
+-- ============================================================
+
+-- ====================================================================
+-- InstinctFi — Supabase Row-Level Security (RLS) Migration
+-- ====================================================================
+-- Run this in your Supabase Dashboard → SQL Editor
+-- This enables RLS on all tables and creates policies for secure access.
+--
+-- IMPORTANT: After running this, anonymous/public reads are still allowed,
+-- but writes require the wallet address in the request JWT metadata.
+-- ====================================================================
+
+-- ── 1. Enable RLS on all tables ─────────────────────────────────────
+
+ALTER TABLE IF EXISTS polls ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS votes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS comments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS push_subscriptions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS poll_images ENABLE ROW LEVEL SECURITY;
+
+-- ── 2. Polls ────────────────────────────────────────────────────────
+
+-- Idempotency: drop this file's policies first so re-runs never collide.
+DROP POLICY IF EXISTS "polls_select_all" ON polls;
+DROP POLICY IF EXISTS "polls_insert_auth" ON polls;
+DROP POLICY IF EXISTS "polls_update_owner" ON polls;
+DROP POLICY IF EXISTS "polls_delete_owner" ON polls;
+DROP POLICY IF EXISTS "votes_select_all" ON votes;
+DROP POLICY IF EXISTS "votes_insert_own" ON votes;
+DROP POLICY IF EXISTS "votes_update_own" ON votes;
+DROP POLICY IF EXISTS "comments_select_all" ON comments;
+DROP POLICY IF EXISTS "comments_insert_auth" ON comments;
+DROP POLICY IF EXISTS "comments_delete_own" ON comments;
+DROP POLICY IF EXISTS "users_select_all" ON users;
+DROP POLICY IF EXISTS "users_insert_own" ON users;
+DROP POLICY IF EXISTS "users_update_own" ON users;
+
+-- Anyone can read polls
+CREATE POLICY "polls_select_all" ON polls
+  FOR SELECT USING (true);
+
+-- BUG-14 FIX: Require authenticated JWT with wallet claim for inserts.
+-- All production writes go through SECURITY DEFINER RPCs (which bypass RLS),
+-- so these policies are defense-in-depth against direct anon table access.
+CREATE POLICY "polls_insert_auth" ON polls
+  FOR INSERT WITH CHECK (
+    current_setting('request.jwt.claims', true)::json->>'wallet' IS NOT NULL
+  );
+
+-- Only the poll creator or an admin can update their polls.
+-- Admins come from the admin_wallets table (single source of truth) instead
+-- of a hardcoded pubkey that goes stale when the admin rotates.
+CREATE POLICY "polls_update_owner" ON polls
+  FOR UPDATE USING (
+    creator = current_setting('request.jwt.claims', true)::json->>'wallet'
+    OR current_setting('request.jwt.claims', true)::json->>'wallet' IN (
+      SELECT wallet FROM admin_wallets
+    )
+  );
+
+-- Only the poll creator or an admin can delete their polls
+CREATE POLICY "polls_delete_owner" ON polls
+  FOR DELETE USING (
+    creator = current_setting('request.jwt.claims', true)::json->>'wallet'
+    OR current_setting('request.jwt.claims', true)::json->>'wallet' IN (
+      SELECT wallet FROM admin_wallets
+    )
+  );
+
+-- ── 3. Votes ────────────────────────────────────────────────────────
+
+-- Anyone can read votes (needed for vote counts, leaderboard)
+CREATE POLICY "votes_select_all" ON votes
+  FOR SELECT USING (true);
+
+-- BUG-14 FIX: Require authenticated JWT with wallet claim.
+CREATE POLICY "votes_insert_own" ON votes
+  FOR INSERT WITH CHECK (
+    current_setting('request.jwt.claims', true)::json->>'wallet' IS NOT NULL
+  );
+
+-- Only the voter can update their own vote record (for claiming)
+CREATE POLICY "votes_update_own" ON votes
+  FOR UPDATE USING (
+    voter = current_setting('request.jwt.claims', true)::json->>'wallet'
+  );
+
+-- ── 4. Comments ─────────────────────────────────────────────────────
+
+-- Anyone can read comments
+CREATE POLICY "comments_select_all" ON comments
+  FOR SELECT USING (true);
+
+-- BUG-14 FIX: Require authenticated JWT with wallet claim.
+CREATE POLICY "comments_insert_auth" ON comments
+  FOR INSERT WITH CHECK (
+    current_setting('request.jwt.claims', true)::json->>'wallet' IS NOT NULL
+  );
+
+-- Only the comment author can delete their own comments
+CREATE POLICY "comments_delete_own" ON comments
+  FOR DELETE USING (
+    wallet = current_setting('request.jwt.claims', true)::json->>'wallet'
+  );
+
+-- ── 5. Users ────────────────────────────────────────────────────────
+
+-- Anyone can read user profiles (needed for leaderboard)
+CREATE POLICY "users_select_all" ON users
+  FOR SELECT USING (true);
+
+-- BUG-14 FIX: Require authenticated JWT with wallet claim.
+CREATE POLICY "users_insert_own" ON users
+  FOR INSERT WITH CHECK (
+    current_setting('request.jwt.claims', true)::json->>'wallet' IS NOT NULL
+  );
+
+-- Only the user can update their own profile
+CREATE POLICY "users_update_own" ON users
+  FOR UPDATE USING (
+    wallet = current_setting('request.jwt.claims', true)::json->>'wallet'
+  );
+
+-- ── 6. Push Subscriptions (legacy) ──────────────────────────────────
+-- The push_subscriptions table only exists in older projects (the app no
+-- longer references it). Policies are applied conditionally so this file
+-- runs cleanly on a fresh database.
+DO $$
+BEGIN
+  IF to_regclass('public.push_subscriptions') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS "push_subs_select_own" ON push_subscriptions';
+    EXECUTE 'DROP POLICY IF EXISTS "push_subs_insert_own" ON push_subscriptions';
+    EXECUTE 'DROP POLICY IF EXISTS "push_subs_delete_own" ON push_subscriptions';
+    -- Users can only read their own push subscriptions
+    EXECUTE 'CREATE POLICY "push_subs_select_own" ON push_subscriptions
+      FOR SELECT USING (
+        wallet = current_setting(''request.jwt.claims'', true)::json->>''wallet''
+      )';
+    -- BUG-14 FIX: Require authenticated JWT with wallet claim.
+    EXECUTE 'CREATE POLICY "push_subs_insert_own" ON push_subscriptions
+      FOR INSERT WITH CHECK (
+        current_setting(''request.jwt.claims'', true)::json->>''wallet'' IS NOT NULL
+      )';
+    -- Users can delete their own push subscriptions
+    EXECUTE 'CREATE POLICY "push_subs_delete_own" ON push_subscriptions
+      FOR DELETE USING (
+        wallet = current_setting(''request.jwt.claims'', true)::json->>''wallet''
+      )';
+  END IF;
+END $$;
+
+-- ── 7. Poll Images (legacy) ─────────────────────────────────────────
+-- Poll images now live in the poll-images storage bucket; the poll_images
+-- table only exists in older projects. Conditional for fresh databases.
+DO $$
+BEGIN
+  IF to_regclass('public.poll_images') IS NOT NULL THEN
+    EXECUTE 'DROP POLICY IF EXISTS "poll_images_select_all" ON poll_images';
+    EXECUTE 'DROP POLICY IF EXISTS "poll_images_insert_auth" ON poll_images';
+    -- Anyone can read poll images
+    EXECUTE 'CREATE POLICY "poll_images_select_all" ON poll_images
+      FOR SELECT USING (true)';
+    -- BUG-14 FIX: Require authenticated JWT with wallet claim.
+    EXECUTE 'CREATE POLICY "poll_images_insert_auth" ON poll_images
+      FOR INSERT WITH CHECK (
+        current_setting(''request.jwt.claims'', true)::json->>''wallet'' IS NOT NULL
+      )';
+  END IF;
+END $$;
+
+-- ============================================================
+-- >>> 003_revoked_tokens.sql
+-- ============================================================
+
+-- ============================================================
+-- S-08 FIX: JWT revocation table
+-- Run this migration in Supabase SQL Editor.
+-- ============================================================
+
+-- Stores revoked JWT IDs (jti) so tokens can be invalidated
+-- before their natural expiration (e.g. on logout, password change).
+create table if not exists revoked_tokens (
+    jti text primary key,
+    wallet text not null,
+    revoked_at timestamptz not null default now(),
+    expires_at timestamptz not null  -- auto-cleanup: delete after JWT would have expired anyway
+);
+
+-- Index for fast lookup during JWT verification
+create index if not exists idx_revoked_tokens_jti on revoked_tokens(jti);
+
+-- Index for cleanup job
+create index if not exists idx_revoked_tokens_expires_at on revoked_tokens(expires_at);
+
+-- RLS: No direct client access. Only service role (via SECURITY DEFINER RPCs) can read/write.
+alter table revoked_tokens enable row level security;
+
+-- No SELECT/INSERT/UPDATE/DELETE policies for anon — all access via service role.
+
+-- ── Cleanup function: removes expired entries (call via pg_cron or manually) ──
+create or replace function cleanup_revoked_tokens()
+returns void
+language plpgsql
+security definer
+as $$
+begin
+    delete from revoked_tokens where expires_at < now();
+end;
+$$;
+
+-- Optional: Schedule cleanup every hour (requires pg_cron extension)
+-- select cron.schedule('cleanup-revoked-tokens', '0 * * * *', 'select cleanup_revoked_tokens()');
+
+-- ============================================================
+-- >>> 004_comment_reactions.sql
+-- ============================================================
+
+-- ─── Comment Reactions Schema ───────────────────────────────────────────────
+-- Allows users to react to comments with emoji (👍, 🔥, 🧠).
+-- One reaction per user per emoji per comment.
+
+CREATE TABLE IF NOT EXISTS comment_reactions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  comment_id UUID NOT NULL REFERENCES comments(id) ON DELETE CASCADE,
+  wallet TEXT NOT NULL,
+  emoji TEXT NOT NULL CHECK (emoji IN ('👍', '🔥', '🧠')),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (comment_id, wallet, emoji)
+);
+
+-- Indexes for fast lookups
+CREATE INDEX IF NOT EXISTS idx_reactions_comment_id ON comment_reactions(comment_id);
+CREATE INDEX IF NOT EXISTS idx_reactions_wallet ON comment_reactions(wallet);
+
+-- RLS policies
+ALTER TABLE comment_reactions ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Anyone can read reactions" ON comment_reactions;
+CREATE POLICY "Anyone can read reactions"
+  ON comment_reactions FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Authenticated users can insert reactions" ON comment_reactions;
+CREATE POLICY "Authenticated users can insert reactions"
+  ON comment_reactions FOR INSERT WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Users can delete own reactions" ON comment_reactions;
+CREATE POLICY "Users can delete own reactions"
+  ON comment_reactions FOR DELETE USING (true);
+
+-- ─── Toggle reaction RPC ────────────────────────────────────────────────────
+-- Inserts if not exists, deletes if exists (toggle behavior)
+CREATE OR REPLACE FUNCTION toggle_reaction(
+  p_comment_id UUID,
+  p_wallet TEXT,
+  p_emoji TEXT
+) RETURNS JSON LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  existing_id UUID;
+  result JSON;
+BEGIN
+  -- Check if reaction exists
+  SELECT id INTO existing_id
+  FROM comment_reactions
+  WHERE comment_id = p_comment_id AND wallet = p_wallet AND emoji = p_emoji;
+
+  IF existing_id IS NOT NULL THEN
+    -- Remove reaction
+    DELETE FROM comment_reactions WHERE id = existing_id;
+    result := json_build_object('action', 'removed', 'emoji', p_emoji);
+  ELSE
+    -- Add reaction
+    INSERT INTO comment_reactions (comment_id, wallet, emoji)
+    VALUES (p_comment_id, p_wallet, p_emoji);
+    result := json_build_object('action', 'added', 'emoji', p_emoji);
+  END IF;
+
+  RETURN result;
+END;
+$$;
+
+-- ─── Get reaction counts for a set of comments ─────────────────────────────
+CREATE OR REPLACE FUNCTION get_reaction_counts(p_comment_ids UUID[])
+RETURNS TABLE (
+  comment_id UUID,
+  emoji TEXT,
+  count BIGINT
+) LANGUAGE SQL STABLE AS $$
+  SELECT cr.comment_id, cr.emoji, COUNT(*) as count
+  FROM comment_reactions cr
+  WHERE cr.comment_id = ANY(p_comment_ids)
+  GROUP BY cr.comment_id, cr.emoji;
+$$;
+
+-- ─── Streak columns for users ───────────────────────────────────────────────
+ALTER TABLE users ADD COLUMN IF NOT EXISTS login_streak INT DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_date DATE;
+
+-- ============================================================
+-- >>> 005_fan_matchday.sql
+-- ============================================================
+
+-- Whistly Matchday — Consumer & Fan Experiences schema
+-- Apply once in Supabase SQL Editor. Server writes use the service-role client;
+-- public clients receive read-only access through RLS.
+
+create table if not exists fan_profiles (
+  wallet text primary key,
+  display_name text not null check (char_length(display_name) between 1 and 32),
+  favorite_team text not null default '',
+  avatar_seed text not null default '',
+  created_at bigint not null,
+  updated_at bigint not null
+);
+
+create table if not exists fan_rooms (
+  id uuid primary key,
+  invite_code text not null unique,
+  creator_wallet text not null,
+  fixture_id text not null,
+  name text not null check (char_length(name) between 1 and 48),
+  visibility text not null check (visibility in ('PRIVATE','PUBLIC')),
+  status text not null check (status in ('OPEN','CLOSED')),
+  created_at bigint not null,
+  updated_at bigint not null
+);
+
+create table if not exists fan_room_members (
+  room_id uuid not null references fan_rooms(id) on delete cascade,
+  wallet text not null,
+  display_name text not null check (char_length(display_name) between 1 and 32),
+  role text not null check (role in ('OWNER','MEMBER')),
+  joined_at bigint not null,
+  primary key (room_id, wallet)
+);
+
+create table if not exists fan_challenges (
+  id text primary key,
+  fixture_id text not null,
+  challenge_type text not null check (challenge_type in ('GOAL_WINDOW')),
+  duration_minutes smallint not null check (duration_minutes in (5,15,45)),
+  start_ts bigint not null,
+  end_ts bigint not null check (end_ts > start_ts),
+  start_clock_seconds integer not null default 0,
+  start_home_score smallint not null check (start_home_score >= 0),
+  start_away_score smallint not null check (start_away_score >= 0),
+  end_home_score smallint,
+  end_away_score smallint,
+  status text not null check (status in ('SCHEDULED','OPEN','LOCKED','RESOLVING','RESOLVED','VOID','CANCELLED')),
+  winning_outcome smallint check (winning_outcome in (0,1)),
+  resolution_source text not null check (resolution_source in ('txline','mock','replay')),
+  resolved_at bigint,
+  created_at bigint not null,
+  unique (fixture_id, challenge_type, duration_minutes, start_ts)
+);
+
+create table if not exists fan_predictions (
+  id text primary key,
+  challenge_id text not null references fan_challenges(id) on delete cascade,
+  wallet text not null,
+  selected_outcome smallint not null check (selected_outcome in (0,1)),
+  submitted_at bigint not null,
+  correct boolean,
+  base_points integer not null default 0,
+  streak_multiplier_bps integer not null default 10000,
+  awarded_points integer not null default 0,
+  scored_at bigint,
+  unique (challenge_id, wallet)
+);
+
+create table if not exists fan_room_scores (
+  room_id uuid not null references fan_rooms(id) on delete cascade,
+  wallet text not null,
+  display_name text not null,
+  total_points integer not null default 0,
+  correct_predictions integer not null default 0,
+  total_predictions integer not null default 0,
+  current_streak integer not null default 0,
+  longest_streak integer not null default 0,
+  updated_at bigint not null,
+  primary key (room_id, wallet)
+);
+
+create table if not exists fan_reactions (
+  id uuid primary key,
+  fixture_id text not null,
+  wallet text not null,
+  reaction_type text not null check (reaction_type in ('GOAL','SHOCK','APPLAUSE','FRUSTRATION','SUPPORT')),
+  created_at bigint not null
+);
+
+create index if not exists fan_challenges_fixture_idx on fan_challenges(fixture_id, end_ts desc);
+create index if not exists fan_predictions_wallet_idx on fan_predictions(wallet, submitted_at desc);
+create index if not exists fan_rooms_fixture_idx on fan_rooms(fixture_id, created_at desc);
+create index if not exists fan_reactions_fixture_idx on fan_reactions(fixture_id, created_at desc);
+create index if not exists fan_room_scores_rank_idx on fan_room_scores(room_id, total_points desc, correct_predictions desc);
+
+alter table fan_profiles enable row level security;
+alter table fan_rooms enable row level security;
+alter table fan_room_members enable row level security;
+alter table fan_challenges enable row level security;
+alter table fan_predictions enable row level security;
+alter table fan_room_scores enable row level security;
+alter table fan_reactions enable row level security;
+
+drop policy if exists "fan profiles public read" on fan_profiles;
+drop policy if exists "fan rooms public read" on fan_rooms;
+drop policy if exists "fan room members public read" on fan_room_members;
+drop policy if exists "fan challenges public read" on fan_challenges;
+drop policy if exists "fan predictions public aggregate read" on fan_predictions;
+drop policy if exists "fan room scores public read" on fan_room_scores;
+drop policy if exists "fan reactions public read" on fan_reactions;
+drop policy if exists "fan profiles deny anon" on fan_profiles;
+drop policy if exists "fan room members deny anon" on fan_room_members;
+drop policy if exists "fan predictions deny anon" on fan_predictions;
+
+-- Profiles, membership rosters and individual picks stay server-only. Public
+-- Matchday reads flow through validated API routes; the service role bypasses RLS.
+create policy "fan profiles deny anon" on fan_profiles for select using (false);
+create policy "fan room members deny anon" on fan_room_members for select using (false);
+create policy "fan predictions deny anon" on fan_predictions for select using (false);
+create policy "fan rooms public read" on fan_rooms for select using (true);
+create policy "fan challenges public read" on fan_challenges for select using (true);
+create policy "fan room scores public read" on fan_room_scores for select using (true);
+create policy "fan reactions public read" on fan_reactions for select using (true);
+
+-- Atomic resolution and scoring. Repeated calls become no-ops after the first
+-- committed RESOLVED transition, preventing double awards.
+create or replace function fan_resolve_challenge_atomic(
+  p_challenge_id text,
+  p_winning_outcome smallint,
+  p_end_home_score smallint,
+  p_end_away_score smallint,
+  p_resolved_at bigint
+) returns json as $$
+declare
+  v_challenge fan_challenges%rowtype;
+  v_prediction fan_predictions%rowtype;
+  v_member fan_room_members%rowtype;
+  v_score fan_room_scores%rowtype;
+  v_correct boolean;
+  v_next_streak integer;
+  v_multiplier integer;
+  v_points integer;
+begin
+  select * into v_challenge from fan_challenges where id = p_challenge_id for update;
+  if not found then return json_build_object('success', false, 'error', 'challenge_not_found'); end if;
+  if v_challenge.status = 'RESOLVED' then return json_build_object('success', true, 'already_resolved', true); end if;
+  if v_challenge.status in ('VOID','CANCELLED') then return json_build_object('success', false, 'error', 'challenge_terminal'); end if;
+
+  update fan_challenges set
+    status = 'RESOLVED', winning_outcome = p_winning_outcome,
+    end_home_score = p_end_home_score, end_away_score = p_end_away_score,
+    resolved_at = p_resolved_at
+  where id = p_challenge_id;
+
+  for v_prediction in
+    select * from fan_predictions where challenge_id = p_challenge_id and scored_at is null for update
+  loop
+    v_correct := v_prediction.selected_outcome = p_winning_outcome;
+
+    for v_member in
+      select m.* from fan_room_members m
+      join fan_rooms r on r.id = m.room_id
+      where m.wallet = v_prediction.wallet and r.fixture_id = v_challenge.fixture_id
+    loop
+      insert into fan_room_scores(room_id, wallet, display_name, updated_at)
+        values(v_member.room_id, v_member.wallet, v_member.display_name, p_resolved_at)
+        on conflict(room_id, wallet) do nothing;
+
+      select * into v_score from fan_room_scores
+        where room_id = v_member.room_id and wallet = v_member.wallet for update;
+
+      if v_correct then
+        v_next_streak := v_score.current_streak + 1;
+        v_multiplier := case
+          when v_next_streak >= 5 then 15000
+          when v_next_streak = 4 then 13000
+          when v_next_streak = 3 then 12000
+          when v_next_streak = 2 then 11000
+          else 10000 end;
+        v_points := (100 * v_multiplier) / 10000;
+      else
+        v_next_streak := 0;
+        v_multiplier := 10000;
+        v_points := 0;
+      end if;
+
+      update fan_room_scores set
+        total_points = total_points + v_points,
+        correct_predictions = correct_predictions + case when v_correct then 1 else 0 end,
+        total_predictions = total_predictions + 1,
+        current_streak = v_next_streak,
+        longest_streak = greatest(longest_streak, v_next_streak),
+        updated_at = p_resolved_at
+      where room_id = v_member.room_id and wallet = v_member.wallet;
+    end loop;
+
+    -- Prediction-level score uses the strongest current room streak. This is
+    -- presentation metadata; authoritative room totals are stored above.
+    select coalesce(max(s.current_streak), case when v_correct then 1 else 0 end)
+      into v_next_streak from fan_room_scores s
+      join fan_rooms r on r.id = s.room_id
+      where s.wallet = v_prediction.wallet and r.fixture_id = v_challenge.fixture_id;
+    v_multiplier := case
+      when v_next_streak >= 5 then 15000
+      when v_next_streak = 4 then 13000
+      when v_next_streak = 3 then 12000
+      when v_next_streak = 2 then 11000
+      else 10000 end;
+    v_points := case when v_correct then (100 * v_multiplier) / 10000 else 0 end;
+
+    update fan_predictions set
+      correct = v_correct,
+      base_points = case when v_correct then 100 else 0 end,
+      streak_multiplier_bps = v_multiplier,
+      awarded_points = v_points,
+      scored_at = p_resolved_at
+    where id = v_prediction.id;
+  end loop;
+
+  return json_build_object('success', true);
+end;
+$$ language plpgsql security definer;
+
+alter table fan_challenges replica identity full;
+alter table fan_room_scores replica identity full;
+alter table fan_reactions replica identity full;
+
+do $$ begin
+  alter publication supabase_realtime add table fan_challenges;
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  alter publication supabase_realtime add table fan_room_scores;
+exception when duplicate_object then null;
+end $$;
+do $$ begin
+  alter publication supabase_realtime add table fan_reactions;
+exception when duplicate_object then null;
+end $$;
+
+-- ============================================================
+-- >>> 006_v2_clob.sql
+-- ============================================================
+
+-- ─── Whistly V2 CLOB schema ────────────────────────────────────────────────
+-- Off-chain order book + fill mirror for the V2 share-trading protocol.
+-- The chain is the source of truth for balances/positions/fills; these
+-- tables index signed order intents and settled fills for fast reads.
+-- All prices are probability basis points (100 = 1%); quantities are
+-- shares; lamports columns are devnet lamports, never USD.
+
+-- Signed order intents (the order book).
+create table if not exists v2_orders (
+  -- sha256 of the canonical signed payload, hex
+  order_hash text primary key,
+  protocol_version int not null default 2,
+  market text not null,             -- MarketV2 PDA base58
+  market_id bigint not null,
+  outcome_index int not null,
+  maker text not null,              -- wallet base58
+  side text not null check (side in ('BUY','SELL')),
+  order_type text not null check (order_type in ('LIMIT','MARKET')),
+  price_bps int not null check (price_bps between 100 and 9900),
+  quantity bigint not null check (quantity > 0),
+  -- BUY: max collateral lamports = price*qty*100; SELL: shares locked
+  locked_amount bigint not null,
+  nonce bigint not null,
+  expiry bigint not null,           -- unix seconds
+  tif text not null check (tif in ('GTC','GTD','FOK','FAK')),
+  filled_quantity bigint not null default 0,
+  status text not null default 'open' check (status in
+    ('open','partially_filled','filled','cancelled','expired','rejected')),
+  reject_reason text,
+  payload_hex text not null,        -- exact signed bytes
+  signature_hex text not null,      -- ed25519 signature over payload
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (maker, nonce)             -- replay/duplicate-nonce defense
+);
+
+create index if not exists v2_orders_book_idx
+  on v2_orders (market, outcome_index, side, status, price_bps);
+create index if not exists v2_orders_maker_idx on v2_orders (maker, status);
+
+-- Settled fills (each row has a devnet transaction signature).
+create table if not exists v2_fills (
+  id bigint generated always as identity primary key,
+  market text not null,
+  fill_seq bigint,                  -- MarketV2.fill_count at settlement
+  mode text not null check (mode in ('TRANSFER','MINT','BURN')),
+  maker_order_hash text not null references v2_orders(order_hash),
+  taker_order_hash text not null references v2_orders(order_hash),
+  maker text not null,
+  taker text not null,
+  outcome_index int not null,       -- maker-side outcome
+  price_bps int not null,           -- execution price (maker outcome)
+  quantity bigint not null,
+  notional_lamports bigint not null,
+  fee_lamports bigint not null,
+  tx_signature text not null unique,-- verifiable devnet settlement tx
+  created_at timestamptz not null default now()
+);
+
+create index if not exists v2_fills_market_idx on v2_fills (market, created_at);
+create index if not exists v2_fills_wallet_idx on v2_fills (maker, taker);
+
+-- Activity feed (orders posted/cancelled, fills, settlements, redemptions).
+create table if not exists v2_activity (
+  id bigint generated always as identity primary key,
+  kind text not null check (kind in
+    ('order_posted','order_cancelled','order_expired','fill','partial_fill',
+     'market_created','market_settled','market_voided','redeemed')),
+  market text,
+  wallet text,
+  outcome_index int,
+  side text,
+  price_bps int,
+  quantity bigint,
+  lamports bigint,
+  tx_signature text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists v2_activity_market_idx on v2_activity (market, created_at desc);
+create index if not exists v2_activity_wallet_idx on v2_activity (wallet, created_at desc);
+
+-- RLS: anon may read, writes only via service role (API routes).
+alter table v2_orders enable row level security;
+alter table v2_fills enable row level security;
+alter table v2_activity enable row level security;
+
+drop policy if exists v2_orders_read on v2_orders;
+create policy v2_orders_read on v2_orders for select using (true);
+drop policy if exists v2_fills_read on v2_fills;
+create policy v2_fills_read on v2_fills for select using (true);
+drop policy if exists v2_activity_read on v2_activity;
+create policy v2_activity_read on v2_activity for select using (true);
+
+-- ============================================================
+-- >>> 007_referral_code.sql
+-- ============================================================
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Referral code column migration
+--
+-- Replaces the full-table scan in /api/referral/resolve (which loaded up to
+-- 1000 wallets per request and silently broke past 1000 users) with an
+-- indexed column computed at insert time.
+--
+-- The code algorithm MUST match walletToCode in the app (DJB2 → base36,
+-- left-padded to 8 chars): see app/src/app/api/referral/resolve/route.ts
+-- and src/components/referrals.tsx.
+--
+-- Run in the Supabase SQL editor after supabase-schema.sql.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- DJB2 hash (32-bit unsigned) → base36, padded to 8 chars.
+create or replace function wallet_to_referral_code(w text)
+returns text
+language plpgsql
+immutable
+as $$
+declare
+    hash bigint := 5381;
+    i int;
+    n bigint;
+    digits constant text := '0123456789abcdefghijklmnopqrstuvwxyz';
+    result text := '';
+begin
+    for i in 1..length(w) loop
+        -- hash = ((hash << 5) + hash + charCode) >>> 0
+        hash := ((hash * 33) + ascii(substr(w, i, 1))) % 4294967296;
+    end loop;
+
+    n := hash;
+    if n = 0 then
+        result := '0';
+    else
+        while n > 0 loop
+            result := substr(digits, (n % 36)::int + 1, 1) || result;
+            n := n / 36;
+        end loop;
+    end if;
+
+    -- Matches JS: hash.toString(36).padStart(8, "0").slice(0, 8)
+    return left(lpad(result, 8, '0'), 8);
+end;
+$$;
+
+-- Column + backfill + index
+alter table users add column if not exists referral_code text;
+
+update users
+set referral_code = wallet_to_referral_code(wallet)
+where referral_code is null;
+
+create index if not exists idx_users_referral_code on users (referral_code);
+
+-- Keep the column populated for new signups.
+create or replace function set_referral_code()
+returns trigger
+language plpgsql
+as $$
+begin
+    if new.referral_code is null then
+        new.referral_code := wallet_to_referral_code(new.wallet);
+    end if;
+    return new;
+end;
+$$;
+
+drop trigger if exists trg_set_referral_code on users;
+create trigger trg_set_referral_code
+    before insert on users
+    for each row
+    execute function set_referral_code();
+
+-- ============================================================
+-- >>> 008_set_balance_atomic.sql
+-- ============================================================
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- set_balance_atomic migration
+--
+-- Replaces the read-modify-write sequence in /api/rpc/sync-balance
+-- (fetch balance → credit_balance OR spend_balance) with one row-locked
+-- transaction, closing the TOCTOU race where two concurrent syncs — or a
+-- sync racing a vote — could double-apply or clobber the balance.
+--
+-- Run in the Supabase SQL editor after supabase-schema.sql.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+create or replace function set_balance_atomic(p_wallet text, p_target bigint)
+returns json as $$
+declare
+  v_user record;
+begin
+  if p_target < 0 then
+    return json_build_object('success', false, 'error', 'invalid_target');
+  end if;
+
+  select * into v_user from users where wallet = p_wallet for update;
+  if not found then
+    return json_build_object('success', false, 'error', 'user_not_found');
+  end if;
+
+  update users set balance = p_target where wallet = p_wallet
+    returning * into v_user;
+
+  return json_build_object('success', true, 'new_balance', v_user.balance);
+end;
+$$ language plpgsql security definer;
