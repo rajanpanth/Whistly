@@ -51,6 +51,7 @@ pub fn settle_market_v2(ctx: Context<ResolveMarketV2>, winning_outcome: u8) -> R
 }
 
 pub fn void_market_v2(ctx: Context<ResolveMarketV2>) -> Result<()> {
+    let clock = Clock::get()?;
     let market = &mut ctx.accounts.market;
     require!(
         market.status == MarketV2::STATUS_OPEN
@@ -58,6 +59,64 @@ pub fn void_market_v2(ctx: Context<ResolveMarketV2>) -> Result<()> {
             || market.status == MarketV2::STATUS_CLOSED,
         ErrorV2::MarketAlreadyResolved
     );
+    // A live market that already has fills cannot be voided mid-flight —
+    // voiding forces every share to redeem at SET_COST / num_outcomes, which
+    // would reverse traders' P&L at the admin's discretion. Void is only a
+    // genuine abort: before any fill, or after the market stops trading.
+    require!(
+        market.fill_count == 0
+            || market.status == MarketV2::STATUS_CLOSED
+            || clock.unix_timestamp >= market.close_ts,
+        ErrorV2::VoidNotAllowed
+    );
+    market.status = MarketV2::STATUS_VOID;
+    market.winning_outcome = MarketV2::WINNING_UNSET;
+
+    emit!(MarketResolvedV2 {
+        market: market.key(),
+        winning_outcome: MarketV2::WINNING_UNSET,
+    });
+    Ok(())
+}
+
+// ─── force_void_market_v2 ───────────────────────────────────────────────────
+// Permissionless liveness fallback (mirrors V1's post-grace void): if the
+// admin never resolves a market, ANYONE can void it once the grace period
+// after close has elapsed, so holders can always exit via redeem_v2 instead
+// of depending on admin liveness. 7 days matches V1's ADMIN_SETTLE_GRACE.
+
+pub const FORCE_VOID_GRACE_SECONDS: i64 = 7 * 24 * 60 * 60;
+
+#[derive(Accounts)]
+pub struct ForceVoidMarketV2<'info> {
+    /// Any signer may crank the fallback — no authority constraint.
+    pub caller: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [b"market_v2", market.market_id.to_le_bytes().as_ref()],
+        bump = market.bump
+    )]
+    pub market: Account<'info, MarketV2>,
+}
+
+pub fn force_void_market_v2(ctx: Context<ForceVoidMarketV2>) -> Result<()> {
+    let clock = Clock::get()?;
+    let market = &mut ctx.accounts.market;
+    require!(
+        market.status == MarketV2::STATUS_OPEN
+            || market.status == MarketV2::STATUS_PAUSED
+            || market.status == MarketV2::STATUS_CLOSED,
+        ErrorV2::MarketAlreadyResolved
+    );
+    require!(
+        clock.unix_timestamp
+            >= market
+                .close_ts
+                .checked_add(FORCE_VOID_GRACE_SECONDS)
+                .ok_or(ErrorV2::MathOverflow)?,
+        ErrorV2::GraceNotElapsed
+    );
+
     market.status = MarketV2::STATUS_VOID;
     market.winning_outcome = MarketV2::WINNING_UNSET;
 

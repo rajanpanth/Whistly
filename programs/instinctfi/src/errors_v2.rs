@@ -66,4 +66,8 @@ pub enum ErrorV2 {
     MathOverflow,
     #[msg("V2: cross-mode only valid for binary markets")]
     NotBinary,
+    #[msg("V2: cannot void a live market with fills before close")]
+    VoidNotAllowed,
+    #[msg("V2: force-void grace period has not elapsed")]
+    GraceNotElapsed,
 }

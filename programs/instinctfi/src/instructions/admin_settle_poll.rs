@@ -70,9 +70,15 @@ pub fn handler(
 
     // ── Compute fee splits from voter pool ──
     // 2% of voter pool → creator reward
-    let creator_pool_reward = total_pool * CREATOR_POOL_REWARD_BPS / 10_000;
+    let creator_pool_reward = total_pool
+        .checked_mul(CREATOR_POOL_REWARD_BPS)
+        .ok_or(InstinctFiError::Overflow)?
+        / 10_000;
     // 3% of voter pool → stays in treasury (platform fee, swept via sweep_dust)
-    let platform_pool_fee = total_pool * PLATFORM_POOL_FEE_BPS / 10_000;
+    let platform_pool_fee = total_pool
+        .checked_mul(PLATFORM_POOL_FEE_BPS)
+        .ok_or(InstinctFiError::Overflow)?
+        / 10_000;
     // 95% of voter pool → distributable to winners via claim_reward
     let distributable = total_pool
         .checked_sub(creator_pool_reward)

@@ -253,6 +253,12 @@ pub mod instinctfi {
         v2::resolve::void_market_v2(ctx)
     }
 
+    /// Permissionless liveness fallback: anyone can void a market that the
+    /// admin has left unresolved for FORCE_VOID_GRACE_SECONDS after close.
+    pub fn force_void_market_v2(ctx: Context<ForceVoidMarketV2>) -> Result<()> {
+        v2::resolve::force_void_market_v2(ctx)
+    }
+
     /// Redeem a position after settlement or void.
     pub fn redeem_v2(ctx: Context<RedeemV2>) -> Result<()> {
         v2::resolve::redeem_v2(ctx)
