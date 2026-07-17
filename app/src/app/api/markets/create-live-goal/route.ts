@@ -2,8 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { createLiveGoalMarket } from "@/lib/liveGoalMarketStore";
 import { isLiveGoalWindowMinutes } from "@/lib/liveGoalMarkets";
 import { fetchTxLineFixtures, TxLineNotConfiguredError } from "@/lib/txline/client";
+import { requireAdminWallet } from "@/lib/adminAuth";
 
 export async function POST(request: NextRequest) {
+  // Market creation is an admin-only operation (same authority as on-chain
+  // poll creation). Also applies per-wallet rate limiting.
+  const auth = await requireAdminWallet(request);
+  if (!auth.ok) return auth.response;
+
   const body = await request.json().catch(() => ({}));
   const windowMinutes = Number(body.windowMinutes);
   const fixtureId = typeof body.fixtureId === "string" ? body.fixtureId.trim() : "";

@@ -13,6 +13,7 @@ import { getWalletFromAuth } from "@/lib/jwt";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 import { sanitizeText, sanitizeUrl } from "@/lib/sanitize";
 import { isRateLimited } from "@/lib/rateLimit";
+import { isAdminInDb } from "@/lib/adminAuth";
 import { log } from "@/lib/logger";
 
 export async function POST(req: NextRequest) {
@@ -40,15 +41,63 @@ export async function POST(req: NextRequest) {
             ? body.option_images.map((img: string) => img ? sanitizeUrl(img) : "")
             : [];
 
-        const { error } = await supabase.from("polls").upsert({
-            id: body.id,
-            poll_id: body.poll_id,
-            creator: wallet,  // Use wallet from JWT, not from body (prevent impersonation)
+        // Metadata fields both creators (edit fallback) and admins may write.
+        // Financial/vote state (vote_counts, status, winning_option, total_voters)
+        // is deliberately excluded on updates so a sync can never clobber it.
+        const metadataFields = {
             title: sanitizeText(body.title),
             description: sanitizeText(body.description || ""),
             category: sanitizeText(body.category || ""),
             image_url: body.image_url ? sanitizeUrl(body.image_url) : "",
             option_images: sanitizedOptionImages,
+        };
+
+        const { data: existing, error: lookupError } = await supabase
+            .from("polls")
+            .select("creator")
+            .eq("id", body.id)
+            .maybeSingle();
+
+        if (lookupError) {
+            log.error("sync_poll_lookup_failed", { error: lookupError.message, pollId: body.id });
+            return NextResponse.json({ success: false, error: "sync_failed" }, { status: 500 });
+        }
+
+        if (existing) {
+            // Edit fallback: only the poll's creator (or an admin) may touch it.
+            if (existing.creator !== wallet && !(await isAdminInDb(wallet))) {
+                log.warn("sync_poll_rejected", { pollId: body.id, wallet, reason: "not_owner" });
+                return NextResponse.json({ success: false, error: "not_owner" }, { status: 403 });
+            }
+
+            const { error } = await supabase
+                .from("polls")
+                .update({
+                    ...metadataFields,
+                    options: Array.isArray(body.options) ? body.options.map((o: string) => sanitizeText(o)) : undefined,
+                    end_time: body.end_time || undefined,
+                })
+                .eq("id", body.id);
+
+            if (error) {
+                log.error("sync_poll_failed", { error: error.message, pollId: body.id });
+                return NextResponse.json({ success: false, error: "sync_failed" }, { status: 500 });
+            }
+            return NextResponse.json({ success: true });
+        }
+
+        // Create fallback: poll creation is admin-gated (see create-poll route),
+        // so inserting a brand-new row here requires admin too.
+        if (!(await isAdminInDb(wallet))) {
+            log.warn("sync_poll_rejected", { pollId: body.id, wallet, reason: "not_admin" });
+            return NextResponse.json({ success: false, error: "not_admin" }, { status: 403 });
+        }
+
+        const { error } = await supabase.from("polls").insert({
+            id: body.id,
+            poll_id: body.poll_id,
+            creator: wallet,  // Use wallet from JWT, not from body (prevent impersonation)
+            ...metadataFields,
             options: Array.isArray(body.options) ? body.options.map((o: string) => sanitizeText(o)) : [],
             vote_counts: Array.isArray(body.options) ? body.options.map(() => 0) : [],
             unit_price_cents: body.unit_price_cents || 0,
@@ -62,7 +111,7 @@ export async function POST(req: NextRequest) {
             total_voters: 0,
             created_at: body.created_at || Math.floor(Date.now() / 1000),
             market_kind: Number(body.market_kind || 0),
-        }, { onConflict: "id" });
+        });
 
         if (error) {
             log.error("sync_poll_failed", { error: error.message, pollId: body.id });

@@ -4,6 +4,7 @@ import nacl from "tweetnacl";
 import { PublicKey } from "@solana/web3.js";
 import { getOrderStore } from "@/lib/v2/orderStore";
 import { fromHex } from "@/lib/v2/codec";
+import { isRateLimitedCustom, getClientIp } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,6 +27,12 @@ export async function POST(req: NextRequest) {
         body = CancelSchema.parse(await req.json());
     } catch {
         return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+    }
+
+    // IP-keyed: cancels are pre-auth (the signature check comes after order
+    // lookup), so throttle lookups themselves against hash-spraying.
+    if (await isRateLimitedCustom(`v2-cancel:ip:${getClientIp(req)}`, 30)) {
+        return NextResponse.json({ error: "rate_limited" }, { status: 429 });
     }
 
     const store = getOrderStore();

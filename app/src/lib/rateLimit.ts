@@ -32,7 +32,7 @@ const MAX_REQUESTS = 30;  // per wallet per window
 
 // ── In-memory fallback (for local dev) ──────────────────────────────────────
 
-function createMemoryLimiter(): RateLimiter {
+function createMemoryLimiter(maxRequests: number, windowMs: number): RateLimiter {
     const map = new Map<string, { count: number; resetAt: number }>();
     let lastPrune = Date.now();
     const PRUNE_INTERVAL = 5 * 60_000;
@@ -51,14 +51,14 @@ function createMemoryLimiter(): RateLimiter {
 
             const entry = map.get(key);
             if (!entry || now >= entry.resetAt) {
-                map.set(key, { count: 1, resetAt: now + WINDOW_MS });
-                return { limited: false, remaining: MAX_REQUESTS - 1, resetAt: now + WINDOW_MS };
+                map.set(key, { count: 1, resetAt: now + windowMs });
+                return { limited: false, remaining: maxRequests - 1, resetAt: now + windowMs };
             }
 
             entry.count++;
-            const remaining = Math.max(0, MAX_REQUESTS - entry.count);
+            const remaining = Math.max(0, maxRequests - entry.count);
             return {
-                limited: entry.count > MAX_REQUESTS,
+                limited: entry.count > maxRequests,
                 remaining,
                 resetAt: entry.resetAt,
             };
@@ -68,7 +68,7 @@ function createMemoryLimiter(): RateLimiter {
 
 // ── Upstash Redis limiter ───────────────────────────────────────────────────
 
-async function createUpstashLimiter(): Promise<RateLimiter | null> {
+async function createUpstashLimiter(maxRequests: number, windowMs: number): Promise<RateLimiter | null> {
     const url = process.env.UPSTASH_REDIS_REST_URL;
     const token = process.env.UPSTASH_REDIS_REST_TOKEN;
     if (!url || !token) return null;
@@ -80,9 +80,9 @@ async function createUpstashLimiter(): Promise<RateLimiter | null> {
         const redis = new Redis({ url, token });
         const ratelimit = new Ratelimit({
             redis,
-            limiter: Ratelimit.slidingWindow(MAX_REQUESTS, `${WINDOW_MS / 1000} s`),
+            limiter: Ratelimit.slidingWindow(maxRequests, `${windowMs / 1000} s`),
             analytics: true,
-            prefix: "instinctfi:rl",
+            prefix: `instinctfi:rl:${maxRequests}per${windowMs}`,
         });
 
         return {
@@ -101,27 +101,28 @@ async function createUpstashLimiter(): Promise<RateLimiter | null> {
     }
 }
 
-// ── Singleton ───────────────────────────────────────────────────────────────
+// ── Limiter cache (one per max/window config) ───────────────────────────────
 
-let _limiter: RateLimiter | null = null;
-let _initPromise: Promise<RateLimiter> | null = null;
+const _limiters = new Map<string, Promise<RateLimiter>>();
 
-async function getLimiter(): Promise<RateLimiter> {
-    if (_limiter) return _limiter;
-    if (_initPromise) return _initPromise;
+function getLimiter(maxRequests: number = MAX_REQUESTS, windowMs: number = WINDOW_MS): Promise<RateLimiter> {
+    const cacheKey = `${maxRequests}:${windowMs}`;
+    const cached = _limiters.get(cacheKey);
+    if (cached) return cached;
 
-    _initPromise = (async () => {
-        const upstash = await createUpstashLimiter();
-        _limiter = upstash ?? createMemoryLimiter();
+    const initPromise = (async () => {
+        const upstash = await createUpstashLimiter(maxRequests, windowMs);
+        const limiter = upstash ?? createMemoryLimiter(maxRequests, windowMs);
         if (upstash) {
             console.log("[RateLimit] Using Upstash Redis rate limiter");
         } else {
             console.log("[RateLimit] Using in-memory rate limiter (dev/fallback)");
         }
-        return _limiter;
+        return limiter;
     })();
 
-    return _initPromise;
+    _limiters.set(cacheKey, initPromise);
+    return initPromise;
 }
 
 // ── Public API ──────────────────────────────────────────────────────────────
@@ -141,4 +142,29 @@ export async function checkRateLimit(wallet: string): Promise<RateLimitResult> {
 export async function isRateLimited(wallet: string): Promise<boolean> {
     const result = await checkRateLimit(wallet);
     return result.limited;
+}
+
+/**
+ * Rate limit with a custom allowance (e.g. tighter for order submission,
+ * looser for quote previews). Keys with different configs are tracked
+ * independently, so prefix the key with the route, e.g. "v2-orders:<wallet>".
+ */
+export async function isRateLimitedCustom(
+    key: string,
+    maxRequests: number,
+    windowMs: number = WINDOW_MS
+): Promise<boolean> {
+    const limiter = await getLimiter(maxRequests, windowMs);
+    const result = await limiter.check(key);
+    return result.limited;
+}
+
+/**
+ * Best-effort client IP for anonymous (pre-auth) rate limiting.
+ * Behind Vercel/most proxies the first x-forwarded-for entry is the client.
+ */
+export function getClientIp(req: { headers: { get(name: string): string | null } }): string {
+    const fwd = req.headers.get("x-forwarded-for");
+    if (fwd) return fwd.split(",")[0].trim();
+    return req.headers.get("x-real-ip") ?? "unknown";
 }

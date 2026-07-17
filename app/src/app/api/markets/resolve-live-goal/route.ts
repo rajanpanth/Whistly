@@ -2,8 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { getLiveGoalMarket, updateLiveGoalMarket } from "@/lib/liveGoalMarketStore";
 import { resolveGoalWindowMarket } from "@/lib/liveGoalMarkets";
 import { fetchTxLineScore, isTxLineMockMode, TxLineNotConfiguredError } from "@/lib/txline/client";
+import { requireAdminWallet } from "@/lib/adminAuth";
 
 export async function POST(request: NextRequest) {
+  // Resolution flips market status and records the settlement tx — admin only
+  // (dry runs included: they reveal the pre-settlement outcome). Rate limited.
+  const auth = await requireAdminWallet(request);
+  if (!auth.ok) return auth.response;
+
   const body = await request.json().catch(() => ({}));
   const marketId = String(body.marketId || "");
   const dryRun = body.dryRun === true;

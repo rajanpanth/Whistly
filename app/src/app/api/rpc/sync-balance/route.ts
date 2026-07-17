@@ -61,7 +61,29 @@ export async function POST(req: NextRequest) {
 
         const supabase = getSupabaseAdmin();
 
-        // Fetch current Supabase balance
+        // Single row-locked transaction (see migrations/008_set_balance_atomic.sql).
+        // Replaces the old fetch → credit/spend sequence, which had a TOCTOU
+        // race against concurrent votes/syncs.
+        const target = Math.round(targetBalance);
+        const { data: setData, error: setError } = await supabase.rpc("set_balance_atomic", {
+            p_wallet: wallet,
+            p_target: target,
+        });
+
+        if (!setError) {
+            const rpcData = setData as any;
+            if (rpcData && !rpcData.success) {
+                const status = rpcData.error === "user_not_found" ? 404 : 500;
+                return NextResponse.json({ success: false, error: rpcData.error ?? "sync_failed" }, { status });
+            }
+            log.info("balance_synced", { wallet, to: target });
+            return NextResponse.json({ success: true, new_balance: target });
+        }
+
+        // Legacy fallback (pre-migration DBs where set_balance_atomic doesn't
+        // exist yet): non-atomic credit/spend diff. Remove once migrated.
+        log.warn("sync_balance_fallback_path", { wallet, error: setError.message });
+
         const { data: user, error: fetchErr } = await supabase
             .from("users")
             .select("balance")
@@ -73,26 +95,15 @@ export async function POST(req: NextRequest) {
         }
 
         const currentBalance = Number(user.balance);
-        const diff = targetBalance - currentBalance;
+        const diff = target - currentBalance;
 
         if (diff === 0) {
             return NextResponse.json({ success: true, new_balance: currentBalance });
         }
 
-        let result;
-        if (diff > 0) {
-            // Need to credit
-            result = await supabase.rpc("credit_balance", {
-                p_wallet: wallet,
-                p_amount: Math.round(diff),
-            });
-        } else {
-            // Need to spend (reduce)
-            result = await supabase.rpc("spend_balance", {
-                p_wallet: wallet,
-                p_amount: Math.round(Math.abs(diff)),
-            });
-        }
+        const result = diff > 0
+            ? await supabase.rpc("credit_balance", { p_wallet: wallet, p_amount: Math.round(diff) })
+            : await supabase.rpc("spend_balance", { p_wallet: wallet, p_amount: Math.round(Math.abs(diff)) });
 
         if (result.error) {
             log.error("sync_balance_rpc_failed", { wallet, error: result.error.message });
@@ -107,16 +118,16 @@ export async function POST(req: NextRequest) {
                 if (currentBal > 0) {
                     await supabase.rpc("spend_balance", { p_wallet: wallet, p_amount: currentBal });
                 }
-                if (targetBalance > 0) {
-                    await supabase.rpc("credit_balance", { p_wallet: wallet, p_amount: Math.round(targetBalance) });
+                if (target > 0) {
+                    await supabase.rpc("credit_balance", { p_wallet: wallet, p_amount: target });
                 }
             } else {
                 return NextResponse.json({ success: false, error: "sync_failed" }, { status: 500 });
             }
         }
 
-        log.info("balance_synced", { wallet, from: currentBalance, to: targetBalance });
-        return NextResponse.json({ success: true, new_balance: targetBalance });
+        log.info("balance_synced", { wallet, from: currentBalance, to: target });
+        return NextResponse.json({ success: true, new_balance: target });
     } catch (e) {
         log.error("sync_balance_unexpected", { error: (e as Error).message });
         return NextResponse.json({ success: false, error: "internal_error" }, { status: 500 });

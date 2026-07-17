@@ -6,6 +6,16 @@ import { CheckCircle2, ExternalLink, RefreshCw, Satellite, ShieldCheck } from "l
 import { useApp } from "@/components/Providers";
 import DataHealthWidget from "@/components/kicktick/DataHealthWidget";
 import type { LiveGoalMarketMetadata } from "@/lib/liveGoalMarkets";
+import { getAuthToken } from "@/lib/supabase";
+
+/** Auth headers for the admin-gated market routes. */
+function adminHeaders(): Record<string, string> {
+  const token = getAuthToken();
+  return {
+    "content-type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
 
 type TxLineStatus = {
   status: string;
@@ -53,7 +63,7 @@ export default function TxLineSettlementPanel() {
     try {
       const res = await fetch("/api/markets/resolve-live-goal", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: adminHeaders(),
         body: JSON.stringify({ marketId: market.id, dryRun: true }),
       });
       const data = await res.json();
@@ -88,7 +98,7 @@ export default function TxLineSettlementPanel() {
       }
       const res = await fetch("/api/markets/resolve-live-goal", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: adminHeaders(),
         body: JSON.stringify({
           marketId: market.id,
           settlementTx,
@@ -107,16 +117,16 @@ export default function TxLineSettlementPanel() {
   };
 
   return (
-    <section className="space-y-4 rounded-xl border border-[#29292f] bg-[#141418] p-4">
+    <section className="space-y-4 rounded-xl border border-[color:var(--market-border)] bg-[color:var(--market-panel)] p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="flex items-center gap-2 font-heading text-lg font-bold text-white">
-          <Satellite size={18} className="text-[#20d38a]" />TxLINE settlement
+          <Satellite size={18} className="text-[color:var(--market-positive)]" />TxLINE settlement
         </h2>
         <div className="flex items-center gap-2 text-xs">
-          <span className={"rounded-full px-2.5 py-1 font-bold uppercase tracking-wider " + (settlementEnabled ? "bg-[#20d38a]/10 text-[#7ce8bb]" : "bg-[#fa4669]/10 text-[#f78ba0]")}>
+          <span className={"rounded-full px-2.5 py-1 font-bold uppercase tracking-wider " + (settlementEnabled ? "bg-[#20d38a]/10 text-[color:var(--market-positive-soft)]" : "bg-[#fa4669]/10 text-[color:var(--market-live-soft)]")}>
             Settlement {settlementEnabled ? "enabled" : "disabled"}
           </span>
-          <button type="button" onClick={refresh} className="grid h-8 w-8 place-items-center rounded-lg border border-[#29292f] text-[#a1a1aa] hover:text-white" aria-label="Refresh TxLINE markets"><RefreshCw size={14} /></button>
+          <button type="button" onClick={refresh} className="grid h-8 w-8 place-items-center rounded-lg border border-[color:var(--market-border)] text-[color:var(--market-text-2)] hover:text-white" aria-label="Refresh TxLINE markets"><RefreshCw size={14} /></button>
         </div>
       </div>
 
@@ -127,30 +137,30 @@ export default function TxLineSettlementPanel() {
       )}
 
       {markets.length === 0 ? (
-        <p className="rounded-lg border border-[#232328] bg-white/[0.03] p-4 text-sm text-[#a1a1aa]">No live goal-window markets yet. Create one from /live.</p>
+        <p className="rounded-lg border border-[#232328] bg-white/[0.03] p-4 text-sm text-[color:var(--market-text-2)]">No live goal-window markets yet. Create one from /live.</p>
       ) : (
         <div className="space-y-3">
           {markets.map(market => {
             const proposal = proposals[market.id];
             return (
-              <article key={market.id} className="rounded-lg border border-[#29292f] bg-[#19191d] p-4">
+              <article key={market.id} className="rounded-lg border border-[color:var(--market-border)] bg-[color:var(--market-card)] p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="font-semibold text-white">{market.homeTeam} vs {market.awayTeam} · Goal in {market.windowMinutes}m</div>
                   <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#c9c9ce]">{market.status}</span>
                 </div>
                 <dl className="mt-3 grid gap-x-5 gap-y-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
-                  <div><dt className="text-[#6f6f78]">Fixture ID</dt><dd className="mt-0.5 font-mono text-[#e6e6e9]">{market.txoddsFixtureId}</dd></div>
-                  <div><dt className="text-[#6f6f78]">Start score</dt><dd className="mt-0.5 font-mono text-[#e6e6e9]">{market.startHomeScore}-{market.startAwayScore}</dd></div>
-                  <div><dt className="text-[#6f6f78]">Window ends</dt><dd className="mt-0.5 font-mono text-[#e6e6e9]">{new Date(market.windowEndTs * 1000).toLocaleTimeString()}</dd></div>
-                  <div><dt className="text-[#6f6f78]">On-chain poll</dt><dd className="mt-0.5 truncate font-mono text-[#e6e6e9]">{market.onchainMarketPubkey.slice(0, 12)}…</dd></div>
+                  <div><dt className="text-[color:var(--market-text-3)]">Fixture ID</dt><dd className="mt-0.5 font-mono text-[#e6e6e9]">{market.txoddsFixtureId}</dd></div>
+                  <div><dt className="text-[color:var(--market-text-3)]">Start score</dt><dd className="mt-0.5 font-mono text-[#e6e6e9]">{market.startHomeScore}-{market.startAwayScore}</dd></div>
+                  <div><dt className="text-[color:var(--market-text-3)]">Window ends</dt><dd className="mt-0.5 font-mono text-[#e6e6e9]">{new Date(market.windowEndTs * 1000).toLocaleTimeString()}</dd></div>
+                  <div><dt className="text-[color:var(--market-text-3)]">On-chain poll</dt><dd className="mt-0.5 truncate font-mono text-[#e6e6e9]">{market.onchainMarketPubkey.slice(0, 12)}…</dd></div>
                 </dl>
 
                 {proposal && (
                   <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg border border-[#20d38a]/25 bg-[#20d38a]/[0.05] p-3 text-xs">
-                    <CheckCircle2 size={14} className="text-[#7ce8bb]" />
+                    <CheckCircle2 size={14} className="text-[color:var(--market-positive-soft)]" />
                     <span className="text-[#e6e6e9]">End score <b className="font-mono">{proposal.endHomeScore}-{proposal.endAwayScore}</b></span>
-                    <span className="text-[#e6e6e9]">Proposed winner: <b className={proposal.resolvedOutcome === "YES" ? "text-[#7ce8bb]" : "text-[#f78ba0]"}>{proposal.resolvedOutcome}</b></span>
-                    <span className={"rounded-full px-2 py-0.5 font-bold uppercase tracking-wider " + (proposal.source === "txline" ? "bg-[#20d38a]/10 text-[#7ce8bb]" : "bg-[#e6ff3e]/10 text-[#d8ec52]")}>
+                    <span className="text-[#e6e6e9]">Proposed winner: <b className={proposal.resolvedOutcome === "YES" ? "text-[color:var(--market-positive-soft)]" : "text-[color:var(--market-live-soft)]"}>{proposal.resolvedOutcome}</b></span>
+                    <span className={"rounded-full px-2 py-0.5 font-bold uppercase tracking-wider " + (proposal.source === "txline" ? "bg-[#20d38a]/10 text-[color:var(--market-positive-soft)]" : "bg-[#e6ff3e]/10 text-[#d8ec52]")}>
                       {proposal.source === "txline" ? "TxLINE score" : "Mock score"}
                     </span>
                   </div>
@@ -161,7 +171,7 @@ export default function TxLineSettlementPanel() {
                     type="button"
                     onClick={() => proposeOutcome(market)}
                     disabled={busyId !== null || !settlementEnabled || market.status === "RESOLVED"}
-                    className="rounded-lg border border-[#3b3b43] px-3 py-2 text-xs font-bold text-[#e6e6e9] transition hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded-lg border border-[color:var(--market-border-strong)] px-3 py-2 text-xs font-bold text-[#e6e6e9] transition hover:bg-white/[0.05] disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {busyId === `propose-${market.id}` ? "Fetching…" : "Fetch end score & propose"}
                   </button>
@@ -169,7 +179,7 @@ export default function TxLineSettlementPanel() {
                     type="button"
                     onClick={() => settleOnChain(market)}
                     disabled={busyId !== null || !proposal || !settlementEnabled || market.status === "RESOLVED"}
-                    className="rounded-lg bg-[#f4f4f5] px-3 py-2 text-xs font-bold text-[#0a0a0c] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded-lg bg-[color:var(--market-text)] px-3 py-2 text-xs font-bold text-[#0a0a0c] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {busyId === `settle-${market.id}` ? "Waiting for wallet…" : "Sign & settle on-chain"}
                   </button>
@@ -178,7 +188,7 @@ export default function TxLineSettlementPanel() {
                       href={`https://explorer.solana.com/tx/${market.settlementTx}?cluster=devnet`}
                       target="_blank"
                       rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-xs font-bold text-[#7ce8bb] hover:text-white"
+                      className="inline-flex items-center gap-1 text-xs font-bold text-[color:var(--market-positive-soft)] hover:text-white"
                     >
                       Settlement tx <ExternalLink size={12} />
                     </a>
@@ -192,8 +202,8 @@ export default function TxLineSettlementPanel() {
 
       <div className="grid gap-3 lg:grid-cols-2">
         <DataHealthWidget compact />
-        <div className="rounded-xl border border-[#29292f] bg-[#141418] p-4 text-xs leading-5 text-[#a1a1aa]">
-          <div className="flex items-center gap-2 font-heading text-sm font-bold text-white"><ShieldCheck size={15} className="text-[#20d38a]" />Settlement rules</div>
+        <div className="rounded-xl border border-[color:var(--market-border)] bg-[color:var(--market-panel)] p-4 text-xs leading-5 text-[color:var(--market-text-2)]">
+          <div className="flex items-center gap-2 font-heading text-sm font-bold text-white"><ShieldCheck size={15} className="text-[color:var(--market-positive)]" />Settlement rules</div>
           <ul className="mt-2 list-disc space-y-1 pl-4">
             <li>Outcome is proposed from score data (YES if total goals increased in the window).</li>
             <li>Nothing is recorded until the admin wallet signs and the transaction confirms.</li>

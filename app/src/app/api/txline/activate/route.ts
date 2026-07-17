@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { txLineOrigin } from "@/lib/txline/client";
 import { setRuntimeApiToken, setRuntimeGuestJwt } from "@/lib/txline/runtimeAuth";
+import { requireAdminWallet } from "@/lib/adminAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,11 @@ export const dynamic = "force-dynamic";
  * server-side (runtime store). The token is never returned to the browser.
  */
 export async function POST(request: NextRequest) {
+  // Activation mutates process-global TxLINE credentials shared by every
+  // request in this runtime — operator/admin only.
+  const auth = await requireAdminWallet(request);
+  if (!auth.ok) return auth.response;
+
   const body = await request.json().catch(() => ({}));
   const txSig = typeof body.txSig === "string" ? body.txSig : "";
   const walletSignature = typeof body.walletSignature === "string" ? body.walletSignature : "";

@@ -32,8 +32,22 @@ export async function POST(req: NextRequest) {
 
         const supabase = getSupabaseAdmin();
 
-        // Fetch wallets in batches to avoid loading too many at once
-        // but NEVER expose them to the client — only return the match.
+        // Indexed lookup on the referral_code column
+        // (see migrations/007_referral_code.sql).
+        const { data: indexed, error: indexedError } = await supabase
+            .from("users")
+            .select("wallet")
+            .eq("referral_code", code)
+            .limit(1)
+            .maybeSingle();
+
+        if (!indexedError) {
+            return NextResponse.json({ wallet: indexed?.wallet ?? null });
+        }
+
+        // Legacy fallback (pre-migration DBs where the column doesn't exist):
+        // scan wallets server-side, never exposing them to the client.
+        log.warn("referral_resolve_fallback_scan", { error: indexedError.message });
         const { data } = await supabase
             .from("users")
             .select("wallet")

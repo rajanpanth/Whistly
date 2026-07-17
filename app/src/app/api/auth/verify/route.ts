@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
 
         // #37: Verify structured message format with domain binding
         // Expected format includes: "Sign in to Whistly" header, wallet address, and timestamp
-        const expectedDomain = process.env.NEXT_PUBLIC_APP_DOMAIN || "instinctfi.com";
+        const expectedDomain = process.env.NEXT_PUBLIC_APP_DOMAIN || "whistly.tech";
 
         // Check message contains wallet address
         if (!message.includes(walletAddress)) {

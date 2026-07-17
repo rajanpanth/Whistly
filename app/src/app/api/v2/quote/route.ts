@@ -6,6 +6,7 @@ import { getOrderStore } from "@/lib/v2/orderStore";
 import { findMatches } from "@/lib/v2/engine";
 import { parseMarketV2 } from "@/lib/v2/programV2";
 import { LAMPORTS_PER_BP, PRICE_SCALE, MAX_PRICE_BPS, MIN_PRICE_BPS, SET_COST } from "@/lib/v2/codec";
+import { isRateLimitedCustom, getClientIp } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,6 +36,12 @@ export async function POST(req: NextRequest) {
         body = QuoteSchema.parse(await req.json());
     } catch {
         return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+    }
+
+    // Generous IP-keyed allowance: quotes poll every few seconds while the
+    // trade ticket is open, but each one costs a Solana RPC read.
+    if (await isRateLimitedCustom(`v2-quote:ip:${getClientIp(req)}`, 120)) {
+        return NextResponse.json({ error: "rate_limited" }, { status: 429 });
     }
 
     const marketInfo = await connection.getAccountInfo(new PublicKey(body.market));

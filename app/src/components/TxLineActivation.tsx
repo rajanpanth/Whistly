@@ -7,6 +7,7 @@ import { CheckCircle2, ExternalLink, Loader2, Satellite, Wallet } from "lucide-r
 import toast from "react-hot-toast";
 import { sendTransaction } from "@/lib/program";
 import { connection } from "@/lib/program.base";
+import { getAuthToken } from "@/lib/supabase";
 
 /**
  * TxLINE free World Cup tier activation (devnet), per
@@ -133,9 +134,13 @@ export default function TxLineActivation() {
 
       // 4. Exchange for the API token (stored server-side only)
       setStep("activate");
+      const authToken = getAuthToken();
       const activateRes = await fetch("/api/txline/activate", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        },
         body: JSON.stringify({ txSig: signature, walletSignature, jwt, leagues: [] }),
       });
       const activateData = await activateRes.json();
