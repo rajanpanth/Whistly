@@ -1,7 +1,8 @@
 import type { MetadataRoute } from "next";
+import { getSiteUrl } from "@/lib/siteUrl";
 
 export default function robots(): MetadataRoute.Robots {
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://instinctfi.com";
+    const baseUrl = getSiteUrl();
 
     return {
         rules: [

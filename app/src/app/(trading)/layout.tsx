@@ -1,6 +1,18 @@
 import "./trading.css";
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import TradingHeader from "./TradingHeader";
+
+export const metadata: Metadata = {
+    title: "Trade — World Cup Prediction Markets",
+    description:
+        "Trade YES/NO shares on World Cup outcomes with an on-chain order book on Solana devnet. Settlement resolves from TxLINE score data.",
+    openGraph: {
+        title: "Whistly Trading",
+        description: "On-chain World Cup prediction markets with order-book trading on Solana devnet.",
+        type: "website",
+    },
+};
 
 /**
  * Isolated layout for the V2 trading experience. All descendant markup

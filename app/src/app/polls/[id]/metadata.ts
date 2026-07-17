@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getSiteUrl } from "@/lib/siteUrl";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -9,7 +10,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   // Build dynamic OG image URL with poll ID as params
   // The actual data is baked into the URL at share time via ShareButton
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://instinctfi.com";
+  const baseUrl = getSiteUrl();
   const ogImageUrl = `${baseUrl}/api/og?title=${encodeURIComponent(`Poll on Whistly`)}&category=Prediction&status=active`;
 
   return {

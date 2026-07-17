@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getSiteUrl } from "@/lib/siteUrl";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { formatSOL } from "@/lib/program";
 
@@ -9,7 +10,7 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_BASE_URL || "https://instinctfi.com";
+  const baseUrl = getSiteUrl();
 
   const defaults: Metadata = {
     title: "Poll | Whistly",

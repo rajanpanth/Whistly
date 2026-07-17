@@ -93,7 +93,7 @@ export async function GET(
                                 color: "#fff",
                             }}
                         >
-                            IF
+                            W
                         </div>
                         <span style={{ fontSize: "28px", fontWeight: 800, color: "#fff" }}>Whistly</span>
                     </div>

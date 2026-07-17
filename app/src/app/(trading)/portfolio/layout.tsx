@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-    title: "Portfolio | Whistly",
+    title: "Portfolio",
     description: "Track your active positions, P&L, voting history, and claimable rewards on Whistly.",
 };
 

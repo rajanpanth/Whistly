@@ -8,7 +8,8 @@ export default function DarkModeToggle() {
   useEffect(() => {
     // L-07 FIX: Guard localStorage access with try/catch for Safari Private / sandboxed iframes
     try {
-      const saved = localStorage.getItem("instinctfi_theme");
+      // Legacy "instinctfi_theme" fallback covers users from before the rename.
+      const saved = localStorage.getItem("whistly_theme") ?? localStorage.getItem("instinctfi_theme");
       if (saved === "light") {
         setIsDark(false);
         document.documentElement.classList.remove("dark");
@@ -25,10 +26,10 @@ export default function DarkModeToggle() {
     setIsDark(newDark);
     if (newDark) {
       document.documentElement.classList.add("dark");
-      localStorage.setItem("instinctfi_theme", "dark");
+      localStorage.setItem("whistly_theme", "dark");
     } else {
       document.documentElement.classList.remove("dark");
-      localStorage.setItem("instinctfi_theme", "light");
+      localStorage.setItem("whistly_theme", "light");
     }
   };
 

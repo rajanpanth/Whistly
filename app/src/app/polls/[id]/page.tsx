@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getSiteUrl } from "@/lib/siteUrl";
 import { createClient } from "@supabase/supabase-js";
 import PollDetailClient from "./PollDetailClient";
 
@@ -32,7 +33,7 @@ async function fetchPollData(id: string) {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const poll = await fetchPollData(id);
-  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "https://instinctfi.com";
+  const baseUrl = getSiteUrl();
 
   if (!poll) {
     return {

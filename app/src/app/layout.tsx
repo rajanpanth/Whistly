@@ -12,6 +12,7 @@ import AppProviders from "@/components/AppProviders";
 import { Toaster } from "react-hot-toast";
 import ConditionalFooter from "@/components/ConditionalFooter";
 import ConditionalPageShell from "@/components/ConditionalPageShell";
+import { getSiteUrl } from "@/lib/siteUrl";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-body" });
 const spaceGrotesk = Space_Grotesk({
@@ -30,7 +31,7 @@ export const metadata: Metadata = {
   keywords: ["prediction market", "Solana", "voting", "DeFi", "polls", "crypto", "Whistly"],
   authors: [{ name: "Whistly" }],
   creator: "Whistly",
-  metadataBase: new URL(process.env.NEXT_PUBLIC_BASE_URL || "https://whistly.app"),
+  metadataBase: new URL(getSiteUrl()),
   openGraph: {
     type: "website",
     siteName: "Whistly",
@@ -62,7 +63,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${inter.variable} ${spaceGrotesk.variable}`} suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('instinctfi_theme');document.documentElement.classList.add(t==='light'?'light':'dark')}catch(e){document.documentElement.classList.add('dark')}})()` }} />
+        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var t=localStorage.getItem('whistly_theme')||localStorage.getItem('instinctfi_theme');document.documentElement.classList.add(t==='light'?'light':'dark')}catch(e){document.documentElement.classList.add('dark')}})()` }} />
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#0a0a0a" />
         <meta name="mobile-web-app-capable" content="yes" />

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, createContext, useContext, ReactNode } from "react";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { getSiteUrl } from "@/lib/siteUrl";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 export type Referral = {
@@ -27,7 +28,7 @@ export function walletToCode(wallet: string): string {
 /** Get the base URL for referral links */
 function getBaseUrl(): string {
   if (typeof window !== "undefined") return window.location.origin;
-  return "https://instinctfi.com";
+  return getSiteUrl();
 }
 
 export function getReferralLink(wallet: string): string {
