@@ -1,48 +1,40 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import useSWR from "swr";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { clearFanAuth, fanAuthValid, fanFetch, signInToMatchday } from "./client";
 import type { FanChallenge, FanPrediction, FanRoom, FanScore } from "./types";
 import type { EnrichedFanFixture } from "./service";
 
+// SWR-backed polling: dedup, revalidate-on-focus, and no refresh while the
+// tab is hidden. Key includes the authenticated flag so a public and an
+// authed read of the same URL never share a cache entry.
 function usePolling<T>(url: string | null, intervalMs = 10_000, authenticated = false) {
-    const [data, setData] = useState<T | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const refresh = useCallback(async () => {
-        if (!url) { setLoading(false); return; }
-        try {
-            const next = authenticated ? await fanFetch<T>(url) : await fetch(url, { cache: "no-store" }).then(async (res) => {
-                const json = await res.json();
-                if (!res.ok) throw new Error(json.error ?? "fan_request_failed");
-                return json as T;
-            });
-            setData(next);
-            setError(null);
-        } catch (cause) {
-            setError(cause instanceof Error ? cause.message : "fan_request_failed");
-        } finally { setLoading(false); }
-    }, [url, authenticated]);
-    useEffect(() => {
-        setLoading(true);
-        refresh();
-        if (!url || intervalMs <= 0) return;
-        // Pause polling while the tab is hidden; refresh immediately on return.
-        const tick = () => {
-            if (!document.hidden) refresh();
-        };
-        const onVisible = () => {
-            if (!document.hidden) refresh();
-        };
-        const timer = window.setInterval(tick, intervalMs);
-        document.addEventListener("visibilitychange", onVisible);
-        return () => {
-            window.clearInterval(timer);
-            document.removeEventListener("visibilitychange", onVisible);
-        };
-    }, [url, intervalMs, refresh]);
-    return { data, loading, error, refresh };
+    const { data, error, isLoading, mutate } = useSWR<T>(
+        url ? [url, authenticated] : null,
+        async ([u, authed]: [string, boolean]) => {
+            if (authed) return fanFetch<T>(u);
+            const res = await fetch(u, { cache: "no-store" });
+            const json = await res.json();
+            if (!res.ok) throw new Error(json.error ?? "fan_request_failed");
+            return json as T;
+        },
+        {
+            refreshInterval: intervalMs > 0 ? intervalMs : 0,
+            refreshWhenHidden: false,
+            revalidateOnFocus: true,
+            dedupingInterval: Math.min(2000, intervalMs),
+            keepPreviousData: true,
+        }
+    );
+    const refresh = useCallback(async () => { await mutate(); }, [mutate]);
+    return {
+        data: data ?? null,
+        loading: isLoading,
+        error: error ? (error instanceof Error ? error.message : "fan_request_failed") : null,
+        refresh,
+    };
 }
 
 export function useFanSession() {

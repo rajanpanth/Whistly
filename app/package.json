@@ -28,11 +28,13 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-hot-toast": "^2.4.1",
+    "swr": "^2.4.2",
     "tweetnacl": "^1.0.3",
     "web-vitals": "^5.1.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.6",
     "@next/bundle-analyzer": "^15.5.20",
     "@playwright/test": "^1.61.1",
     "@testing-library/jest-dom": "^6.6.0",
@@ -43,7 +45,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "autoprefixer": "^10.4.20",
-    "eslint": "^8.57.1",
+    "eslint": "^9.39.5",
     "eslint-config-next": "^15.5.12",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^29.7.0",

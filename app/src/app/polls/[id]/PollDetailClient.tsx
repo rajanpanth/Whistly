@@ -253,7 +253,7 @@ export default function PollDetailClient() {
                                 <span className="rounded-md bg-white/[0.06] px-2 py-0.5 font-bold text-[#c9c9ce]">{poll.category}</span>
                                 <span className="font-mono">{formatDollars(poll.totalPoolLamports)} Vol.</span>
                                 {endDate && <span className="flex items-center gap-1"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></svg>{endDate}</span>}
-                                <span className={`rounded-md px-2 py-0.5 font-bold ${isSettled ? "bg-[#20d38a]/15 text-[#7ce8bb]" : isEnded ? "bg-[#fa4669]/15 text-[#f78ba0]" : "bg-white/[0.06] text-[#c9c9ce]"}`}>
+                                <span className={`rounded-md px-2 py-0.5 font-bold ${isSettled ? "bg-[#20d38a]/15 text-[color:var(--market-positive-soft)]" : isEnded ? "bg-[#fa4669]/15 text-[color:var(--market-live-soft)]" : "bg-white/[0.06] text-[#c9c9ce]"}`}>
                                     {isSettled ? t("settled") : isEnded ? "Awaiting settlement" : timeLeft}
                                 </span>
                             </div>
@@ -263,7 +263,7 @@ export default function PollDetailClient() {
                             <ShareButton pollId={poll.id} pollTitle={poll.title} />
                             <div className="text-right">
                                 <div className="font-mono text-2xl font-extrabold sm:text-3xl" style={{ color: optionColor(headlineIndex) }}>{headlinePct}%</div>
-                                <div className="text-[10px] font-bold uppercase tracking-wider text-[#6f6f78]">{isSettled ? "settled" : "chance"} · {poll.options[headlineIndex]}</div>
+                                <div className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--market-text-3)]">{isSettled ? "settled" : "chance"} · {poll.options[headlineIndex]}</div>
                             </div>
                         </div>
                     </div>
@@ -275,7 +275,7 @@ export default function PollDetailClient() {
 
                     {/* Outcomes — Polymarket rows */}
                     <section className="mt-5 overflow-hidden rounded-2xl border border-white/[0.07] bg-gradient-to-b from-[#15151a] to-[#101014]">
-                        <div className="flex items-center justify-between border-b border-white/[0.05] px-4 py-3 text-[11px] font-bold uppercase tracking-[0.12em] text-[#6f6f78]">
+                        <div className="flex items-center justify-between border-b border-white/[0.05] px-4 py-3 text-[11px] font-bold uppercase tracking-[0.12em] text-[color:var(--market-text-3)]">
                             <span>Outcome</span>
                             <span>% chance · trade</span>
                         </div>
@@ -291,12 +291,12 @@ export default function PollDetailClient() {
                                         {optionAvatar(i)}
                                         <div className="min-w-0 flex-1">
                                             <div className="flex items-center gap-2 truncate text-sm font-bold text-white">
-                                                {isWinner && <span className="text-[#20d38a]">✓</span>}
+                                                {isWinner && <span className="text-[color:var(--market-positive)]">✓</span>}
                                                 {opt}
                                             </div>
                                             <div className="text-xs text-[#8b8b94]">
                                                 {poll.voteCounts[i]} votes
-                                                {userVotes > 0 && <span className="ml-2 text-[#7ce8bb]">· you hold {userVotes} ({formatDollars(userVotes * poll.unitPriceLamports)})</span>}
+                                                {userVotes > 0 && <span className="ml-2 text-[color:var(--market-positive-soft)]">· you hold {userVotes} ({formatDollars(userVotes * poll.unitPriceLamports)})</span>}
                                             </div>
                                         </div>
                                         <div className="w-14 text-right font-mono text-lg font-extrabold text-white">{Math.round(pct)}%</div>
@@ -312,7 +312,7 @@ export default function PollDetailClient() {
                                                 Buy · {Math.round(pct)}%
                                             </button>
                                         ) : (
-                                            <span className={`rounded-lg px-3 py-1.5 text-xs font-extrabold ${isWinner ? "bg-[#20d38a]/15 text-[#7ce8bb]" : "bg-white/[0.04] text-[#6f6f78]"}`}>
+                                            <span className={`rounded-lg px-3 py-1.5 text-xs font-extrabold ${isWinner ? "bg-[#20d38a]/15 text-[color:var(--market-positive-soft)]" : "bg-white/[0.04] text-[color:var(--market-text-3)]"}`}>
                                                 {isSettled ? (isWinner ? "Won" : "Lost") : "Locked"}
                                             </span>
                                         )}
@@ -335,11 +335,11 @@ export default function PollDetailClient() {
                             ].map(([value, label]) => (
                                 <div key={label} className="rounded-xl border border-white/[0.05] bg-[#0d0d11] px-3 py-2.5 text-center">
                                     <div className="font-mono text-sm font-bold text-white">{value}</div>
-                                    <div className="mt-0.5 text-[10px] uppercase tracking-wider text-[#6f6f78]">{label}</div>
+                                    <div className="mt-0.5 text-[10px] uppercase tracking-wider text-[color:var(--market-text-3)]">{label}</div>
                                 </div>
                             ))}
                         </div>
-                        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#6f6f78]">
+                        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[color:var(--market-text-3)]">
                             <span>Platform fee: {formatDollars(poll.platformFeeLamports)}</span>
                             <span>Creator reward: {formatDollars(poll.creatorRewardLamports)}</span>
                             <span>Seed investment: {formatDollars(poll.creatorInvestmentLamports)}</span>
@@ -350,9 +350,9 @@ export default function PollDetailClient() {
                             if (!isSafeUrl) return null;
                             return (
                                 <div className="mt-4 flex items-center gap-2 rounded-lg border border-[#20d38a]/20 bg-[#20d38a]/[0.05] p-2.5">
-                                    <span className="text-sm text-[#7ce8bb]">🔗</span>
+                                    <span className="text-sm text-[color:var(--market-positive-soft)]">🔗</span>
                                     <span className="text-xs text-[#8b8b94]">Resolution source:</span>
-                                    <a href={resolutionProof} target="_blank" rel="noopener noreferrer" className="truncate text-xs text-[#7ce8bb] underline underline-offset-2 hover:text-white">
+                                    <a href={resolutionProof} target="_blank" rel="noopener noreferrer" className="truncate text-xs text-[color:var(--market-positive-soft)] underline underline-offset-2 hover:text-white">
                                         {resolutionProof}
                                     </a>
                                 </div>
@@ -373,7 +373,7 @@ export default function PollDetailClient() {
                             {/* Buy only — the pooled protocol has no pre-settlement exit */}
                             <div className="flex items-center justify-between border-b border-white/[0.06] pb-2 text-sm font-extrabold">
                                 <span className="text-white">Buy position</span>
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-[#6f6f78]">Pooled market</span>
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-[color:var(--market-text-3)]">Pooled market</span>
                             </div>
 
                             {/* Outcome selector */}
@@ -398,7 +398,7 @@ export default function PollDetailClient() {
 
                             {/* Amount (devnet SOL) */}
                             <div className="mt-4 flex items-baseline justify-between">
-                                <span className="text-xs font-bold uppercase tracking-wider text-[#6f6f78]">Amount</span>
+                                <span className="text-xs font-bold uppercase tracking-wider text-[color:var(--market-text-3)]">Amount</span>
                                 <span className="text-[10px] text-[#5d5d65]">devnet SOL</span>
                             </div>
                             <input
@@ -424,14 +424,14 @@ export default function PollDetailClient() {
 
                             {/* Order summary — Polymarket format */}
                             <div className="mt-4 space-y-1.5 rounded-xl border border-white/[0.05] bg-[#0d0d11] p-3 text-sm">
-                                <div className="flex justify-between text-xs"><span className="text-[#6f6f78]">Shares</span><span className="font-mono font-bold text-white">{numCoins}</span></div>
-                                <div className="flex justify-between text-xs"><span className="text-[#6f6f78]">Entry probability</span><span className="font-mono text-[#8b8b94]">{selectedOption !== null ? `${Math.round(pctOf(selectedOption))}%` : "—"}</span></div>
-                                <div className="flex justify-between text-xs"><span className="text-[#6f6f78]">Cost</span><span className="font-mono text-[#8b8b94]">{formatDollars(cost)}</span></div>
+                                <div className="flex justify-between text-xs"><span className="text-[color:var(--market-text-3)]">Shares</span><span className="font-mono font-bold text-white">{numCoins}</span></div>
+                                <div className="flex justify-between text-xs"><span className="text-[color:var(--market-text-3)]">Entry probability</span><span className="font-mono text-[#8b8b94]">{selectedOption !== null ? `${Math.round(pctOf(selectedOption))}%` : "—"}</span></div>
+                                <div className="flex justify-between text-xs"><span className="text-[color:var(--market-text-3)]">Cost</span><span className="font-mono text-[#8b8b94]">{formatDollars(cost)}</span></div>
                                 <div className="flex justify-between border-t border-white/[0.05] pt-1.5">
                                     <span className="font-bold text-[#8b8b94]">To win 💸</span>
-                                    <span className="font-mono text-base font-extrabold text-[#7ce8bb]">{selectedOption !== null ? formatDollars(toWin) : "—"}</span>
+                                    <span className="font-mono text-base font-extrabold text-[color:var(--market-positive-soft)]">{selectedOption !== null ? formatDollars(toWin) : "—"}</span>
                                 </div>
-                                {userAccount && <div className="flex justify-between text-xs"><span className="text-[#6f6f78]">Balance</span><span className="font-mono text-[#8b8b94]">{formatDollars(userAccount.balance)}</span></div>}
+                                {userAccount && <div className="flex justify-between text-xs"><span className="text-[color:var(--market-text-3)]">Balance</span><span className="font-mono text-[#8b8b94]">{formatDollars(userAccount.balance)}</span></div>}
                             </div>
 
                             {/* Action */}
@@ -441,10 +441,10 @@ export default function PollDetailClient() {
                                 className={`mt-4 w-full rounded-xl py-3.5 text-sm font-extrabold transition active:scale-[0.98] ${voting
                                     ? "cursor-wait bg-[#20d38a]/60 text-[#0a0a0c]"
                                     : walletConnected && selectedOption !== null
-                                        ? "bg-[#20d38a] text-[#0a0a0c] shadow-lg shadow-[#20d38a]/20 hover:bg-[#3ee0a4]"
+                                        ? "bg-[color:var(--market-positive)] text-[#0a0a0c] shadow-lg shadow-[#20d38a]/20 hover:bg-[#3ee0a4]"
                                         : !walletConnected
-                                            ? "bg-[#20d38a] text-[#0a0a0c] hover:bg-[#3ee0a4]"
-                                            : "cursor-not-allowed bg-white/[0.06] text-[#6f6f78]"
+                                            ? "bg-[color:var(--market-positive)] text-[#0a0a0c] hover:bg-[#3ee0a4]"
+                                            : "cursor-not-allowed bg-white/[0.06] text-[color:var(--market-text-3)]"
                                     }`}
                             >
                                 {voting ? (
@@ -470,7 +470,7 @@ export default function PollDetailClient() {
                             <button
                                 onClick={handleSettle}
                                 disabled={settling}
-                                className={`mt-3 w-full rounded-xl py-3 text-sm font-extrabold transition ${settling ? "cursor-wait bg-[#20d38a]/60 text-[#0a0a0c]" : "bg-[#20d38a] text-[#0a0a0c] hover:bg-[#3ee0a4]"}`}
+                                className={`mt-3 w-full rounded-xl py-3 text-sm font-extrabold transition ${settling ? "cursor-wait bg-[#20d38a]/60 text-[#0a0a0c]" : "bg-[color:var(--market-positive)] text-[#0a0a0c] hover:bg-[#3ee0a4]"}`}
                             >
                                 {settling ? "Settling..." : t("settlePoll")}
                             </button>
@@ -480,14 +480,14 @@ export default function PollDetailClient() {
                     {/* Claim */}
                     {canClaim && (
                         <section className="rounded-2xl border border-[#20d38a]/25 bg-gradient-to-b from-[#0d1f17] to-[#101014] p-4">
-                            <h2 className="text-sm font-bold text-[#7ce8bb]">{t("youWon")}</h2>
+                            <h2 className="text-sm font-bold text-[color:var(--market-positive-soft)]">{t("youWon")}</h2>
                             <p className="mt-1.5 text-xs text-[#8b8b94]">
-                                Your reward: <span className="font-mono font-bold text-[#7ce8bb]">{formatDollars(potentialReward)}</span>
+                                Your reward: <span className="font-mono font-bold text-[color:var(--market-positive-soft)]">{formatDollars(potentialReward)}</span>
                             </p>
                             <button
                                 onClick={handleClaim}
                                 disabled={claiming}
-                                className={`mt-3 w-full rounded-xl py-3 text-sm font-extrabold transition ${claiming ? "cursor-wait bg-[#20d38a]/60 text-[#0a0a0c]" : "bg-[#20d38a] text-[#0a0a0c] hover:bg-[#3ee0a4]"}`}
+                                className={`mt-3 w-full rounded-xl py-3 text-sm font-extrabold transition ${claiming ? "cursor-wait bg-[#20d38a]/60 text-[#0a0a0c]" : "bg-[color:var(--market-positive)] text-[#0a0a0c] hover:bg-[#3ee0a4]"}`}
                             >
                                 {claiming ? "Claiming..." : t("claimReward")}
                             </button>
@@ -503,7 +503,7 @@ export default function PollDetailClient() {
 
                     {/* Creator notice */}
                     {isCreator && !isSettled && (
-                        <section className="rounded-2xl border border-white/[0.07] bg-[#101014] p-4 text-center text-xs text-[#6f6f78]">
+                        <section className="rounded-2xl border border-white/[0.07] bg-[#101014] p-4 text-center text-xs text-[color:var(--market-text-3)]">
                             You created this market — you cannot trade on it.
                         </section>
                     )}
@@ -512,7 +512,7 @@ export default function PollDetailClient() {
                     {canManage && (
                         <section className="rounded-2xl border border-white/[0.07] bg-[#101014] p-4">
                             <h2 className="text-sm font-bold text-white">Manage market</h2>
-                            <p className="mt-1 text-xs text-[#6f6f78]">No positions yet — you can edit or delete.</p>
+                            <p className="mt-1 text-xs text-[color:var(--market-text-3)]">No positions yet — you can edit or delete.</p>
                             <div className="mt-3 flex gap-2">
                                 <button
                                     onClick={() => setShowEditModal(true)}
@@ -522,7 +522,7 @@ export default function PollDetailClient() {
                                 </button>
                                 <button
                                     onClick={() => setShowDeleteModal(true)}
-                                    className="flex-1 rounded-xl border border-[#fa4669]/30 py-2.5 text-xs font-bold text-[#f78ba0] transition hover:border-[#fa4669]/60 hover:bg-[#fa4669]/10"
+                                    className="flex-1 rounded-xl border border-[#fa4669]/30 py-2.5 text-xs font-bold text-[color:var(--market-live-soft)] transition hover:border-[#fa4669]/60 hover:bg-[#fa4669]/10"
                                 >
                                     {t("delete")}
                                 </button>

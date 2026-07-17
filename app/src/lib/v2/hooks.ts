@@ -1,56 +1,39 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
+import useSWR from "swr";
 
-// ─── generic polling fetch ──────────────────────────────────────────────────
+// ─── generic polling fetch (SWR-backed) ─────────────────────────────────────
+// SWR gives request dedup across components, revalidate-on-focus/reconnect,
+// and pauses refresh while the tab is hidden (refreshWhenHidden: false).
+// The return shape matches the old hand-rolled hook so callers are unchanged.
+
+async function jsonFetcher(url: string) {
+    const res = await fetch(url, { cache: "no-store" });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error ?? "fetch_failed");
+    return json;
+}
 
 function usePolling<T>(url: string | null, intervalMs = 4000) {
-    const [data, setData] = useState<T | null>(null);
-    const [error, setError] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
-    const savedUrl = useRef(url);
-    savedUrl.current = url;
+    const { data, error, isLoading, mutate } = useSWR<T>(url, jsonFetcher, {
+        refreshInterval: intervalMs > 0 ? intervalMs : 0,
+        refreshWhenHidden: false,
+        revalidateOnFocus: true,
+        dedupingInterval: Math.min(2000, intervalMs),
+        keepPreviousData: true,
+    });
 
     const refresh = useCallback(async () => {
-        if (!savedUrl.current) {
-            setLoading(false);
-            return;
-        }
-        try {
-            const res = await fetch(savedUrl.current, { cache: "no-store" });
-            const json = await res.json();
-            if (!res.ok) throw new Error(json.error ?? "fetch_failed");
-            setData(json);
-            setError(null);
-        } catch (e) {
-            setError(e instanceof Error ? e.message : "fetch_failed");
-        } finally {
-            setLoading(false);
-        }
-    }, []);
+        await mutate();
+    }, [mutate]);
 
-    useEffect(() => {
-        setLoading(true);
-        refresh();
-        if (!url || intervalMs <= 0) return;
-
-        // Pause polling while the tab is hidden (saves battery, RPC quota,
-        // and rate-limit budget); refresh immediately on return.
-        const tick = () => {
-            if (!document.hidden) refresh();
-        };
-        const onVisible = () => {
-            if (!document.hidden) refresh();
-        };
-        const t = setInterval(tick, intervalMs);
-        document.addEventListener("visibilitychange", onVisible);
-        return () => {
-            clearInterval(t);
-            document.removeEventListener("visibilitychange", onVisible);
-        };
-    }, [url, intervalMs, refresh]);
-
-    return { data, error, loading, refresh };
+    return {
+        data: data ?? null,
+        error: error ? (error instanceof Error ? error.message : "fetch_failed") : null,
+        loading: isLoading,
+        refresh,
+    };
 }
 
 // ─── typed hooks ────────────────────────────────────────────────────────────
