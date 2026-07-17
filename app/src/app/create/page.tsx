@@ -1,22 +1,23 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useApp, formatDollars, SOL_UNIT } from "@/components/Providers";
-import { CATEGORIES, isAdminWallet } from "@/lib/constants";
-import ImageUpload from "@/components/ImageUpload";
+import { useApp, SOL_UNIT } from "@/components/Providers";
+import { isAdminWallet } from "@/lib/constants";
 import { uploadPollImage } from "@/lib/uploadImage";
 import { sanitizeTitle, sanitizeDescription, sanitizeOptions } from "@/lib/sanitize";
 import toast from "react-hot-toast";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "@/lib/languageContext";
-import { tCat } from "@/lib/translations";
-
-const MAX_OPTIONS = 6;
+import TemplatePicker, { Template } from "./TemplatePicker";
+import MainImageField from "./MainImageField";
+import BasicDetailsFields from "./BasicDetailsFields";
+import OptionsEditor, { MAX_OPTIONS } from "./OptionsEditor";
+import PricingSubmitSection from "./PricingSubmitSection";
 
 export default function CreatePollPage() {
   const { walletConnected, walletAddress, userAccount, createPoll, connectWallet } = useApp();
   const router = useRouter();
-  const { t, lang } = useLanguage();
+  const { t } = useLanguage();
 
   // ── Form state ──
   const [title, setTitle] = useState("");
@@ -241,53 +242,7 @@ export default function CreatePollPage() {
     }
   };
 
-  // ── Preview math ──
-  const CREATION_FEE_PREVIEW = 500_000_000; // 0.5 SOL
-
-  const TEMPLATES = [
-    {
-      name: "🏆 Tournament Winner",
-      title: "Who will win the 2026 FIFA World Cup?",
-      category: "World Cup",
-      options: ["Brazil", "France", "Argentina", "England", "Other"],
-      duration: "720",
-      unitPrice: "0.01",
-    },
-    {
-      name: "⚽ Match Winner",
-      title: "[TEAM A] vs [TEAM B] — who wins?",
-      category: "World Cup",
-      options: ["Team A", "Team B", "Draw"],
-      duration: "48",
-      unitPrice: "0.005",
-    },
-    {
-      name: "🥅 Goal Market",
-      title: "Will [TEAM] score 2+ goals against [OPPONENT]?",
-      category: "World Cup",
-      options: ["Yes", "No"],
-      duration: "168",
-      unitPrice: "0.01",
-    },
-    {
-      name: "🎯 Knockout Prop",
-      title: "Will [TEAM] reach the quarterfinals?",
-      category: "World Cup",
-      options: ["Yes", "No"],
-      duration: "72",
-      unitPrice: "0.01",
-    },
-    {
-      name: "👟 Golden Boot",
-      title: "Which player wins the Golden Boot?",
-      category: "World Cup",
-      options: ["Mbappe", "Messi", "Kane", "Vinicius Jr", "Other"],
-      duration: "720",
-      unitPrice: "0.005",
-    },
-  ];
-
-  const applyTemplate = (tpl: typeof TEMPLATES[0]) => {
+  const applyTemplate = (tpl: Template) => {
     setTitle(tpl.title);
     setCategory(tpl.category);
     setOptions(tpl.options);
@@ -306,259 +261,49 @@ export default function CreatePollPage() {
       <p className="text-gray-500 text-sm mb-4">{t("createPollSubtitle")}</p>
 
       {/* Quick Templates */}
-      <div className="mb-6">
-        <p className="text-xs text-gray-500 mb-2">{t("quickStart")}</p>
-        <div className="flex flex-wrap gap-2">
-          {TEMPLATES.map((tpl) => (
-            <button
-              key={tpl.name}
-              type="button"
-              onClick={() => applyTemplate(tpl)}
-              className="px-3 py-1.5 bg-surface-50 hover:bg-surface-100 border border-border rounded-lg text-xs text-gray-300 transition-colors hover:border-brand-500/25"
-            >
-              {tpl.name}
-            </button>
-          ))}
-        </div>
-      </div>
+      <TemplatePicker onApply={applyTemplate} />
 
       <form onSubmit={handleSubmit} className="space-y-5 sm:space-y-6">
         {/* Main Poll Image (optional) */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">
-            {t("pollImage")} <span className="text-gray-600">{t("optional")}</span>
-          </label>
-          <ImageUpload
-            imagePreview={imagePreview}
-            onFileSelect={handleImageSelect}
-            onRemove={handleImageRemove}
-            uploading={imageUploading}
-            error={imageError}
-          />
-        </div>
+        <MainImageField
+          imagePreview={imagePreview}
+          imageUploading={imageUploading}
+          imageError={imageError}
+          handleImageSelect={handleImageSelect}
+          handleImageRemove={handleImageRemove}
+        />
 
-        {/* Title */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">{t("pollTitle")}</label>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            maxLength={64}
-            placeholder="Will Brazil score 3+ goals in its opener?"
-            className="w-full px-4 py-3 bg-surface-100 border border-border rounded-xl focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition-colors"
-          />
-          <div className="text-xs text-gray-600 mt-1 text-right">{title.length}/64</div>
-        </div>
+        {/* Title / Description / Category */}
+        <BasicDetailsFields
+          title={title}
+          setTitle={setTitle}
+          description={description}
+          setDescription={setDescription}
+          category={category}
+          setCategory={setCategory}
+        />
 
-        {/* Description */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">{t("description")}</label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            maxLength={256}
-            rows={3}
-            placeholder="Describe the poll conditions and how the winner is determined..."
-            className="w-full px-4 py-3 bg-surface-100 border border-border rounded-xl focus:border-brand-500 focus:ring-1 focus:ring-brand-500 outline-none transition-colors resize-none"
-          />
-          <div className="text-xs text-gray-600 mt-1 text-right">{description.length}/256</div>
-        </div>
+        {/* Options (labels + avatar images) */}
+        <OptionsEditor
+          options={options}
+          optionImagePreviews={optionImagePreviews}
+          optionImageErrors={optionImageErrors}
+          updateOption={updateOption}
+          removeOption={removeOption}
+          addOption={addOption}
+          handleOptionImageSelect={handleOptionImageSelect}
+          handleOptionImageRemove={handleOptionImageRemove}
+        />
 
-        {/* Category */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">{t("category")}</label>
-          <div className="flex flex-wrap gap-2">
-            {CATEGORIES.map((cat) => (
-              <button
-                key={cat}
-                type="button"
-                onClick={() => setCategory(cat)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  category === cat
-                    ? "bg-brand-600 text-white shadow-lg shadow-brand-500/15"
-                    : "bg-surface-100 text-gray-400 hover:text-white border border-border hover:border-gray-600"
-                }`}
-              >
-                {tCat(cat, lang)}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Options */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">{t("options")} (2-6)</label>
-          <div className="space-y-3">
-            {options.map((opt, i) => (
-              <div key={i} className="space-y-2">
-                <div className="flex gap-2 items-center">
-                  <div className="w-8 h-10 flex items-center justify-center text-gray-500 font-mono text-sm shrink-0">
-                    {String.fromCharCode(65 + i)}
-                  </div>
-                  <input
-                    type="text"
-                    value={opt}
-                    onChange={(e) => updateOption(i, e.target.value)}
-                    maxLength={32}
-                    placeholder={`Option ${String.fromCharCode(65 + i)}`}
-                    className="flex-1 px-4 py-2.5 bg-surface-100 border border-border rounded-xl focus:border-brand-500 outline-none transition-colors"
-                  />
-                  {options.length > 2 && (
-                    <button
-                      type="button"
-                      onClick={() => removeOption(i)}
-                      className="w-8 h-8 flex items-center justify-center rounded-lg text-red-400 hover:bg-red-600/10 hover:text-red-300 transition-colors shrink-0"
-                      aria-label={`Remove option ${String.fromCharCode(65 + i)}`}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M1 1l12 12M13 1L1 13" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-                {/* Option image upload for each option */}
-                {i < options.length && (
-                  <div className="ml-8">
-                    <label className="block text-xs text-gray-500 mb-1.5">
-                      Option {String.fromCharCode(65 + i)} Avatar <span className="text-gray-600">(optional)</span>
-                    </label>
-                    <div className="max-w-[200px]">
-                      {optionImagePreviews[i] ? (
-                        <div className="relative group w-16 h-16">
-                          {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img
-                            src={optionImagePreviews[i]!}
-                            alt={`Option ${String.fromCharCode(65 + i)}`}
-                            className="w-16 h-16 rounded-full object-cover border-2 border-border"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleOptionImageRemove(i)}
-                            className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            &times;
-                          </button>
-                        </div>
-                      ) : (
-                        <label className="flex items-center gap-2 px-3 py-2 bg-surface-100 border border-border border-dashed rounded-lg cursor-pointer hover:border-gray-500 transition-colors">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-gray-500">
-                            <rect x="3" y="3" width="18" height="18" rx="9" />
-                            <path d="M12 8v8M8 12h8" />
-                          </svg>
-                          <span className="text-xs text-gray-500">{t("addAvatar")}</span>
-                          <input
-                            type="file"
-                            accept="image/jpeg,image/png,image/webp"
-                            onChange={(e) => {
-                              const file = e.target.files?.[0];
-                              if (file) handleOptionImageSelect(i)(file);
-                              e.target.value = "";
-                            }}
-                            className="hidden"
-                          />
-                        </label>
-                      )}
-                      {optionImageErrors[i] && (
-                        <p className="text-xs text-red-400 mt-1">{optionImageErrors[i]}</p>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-          {options.length < MAX_OPTIONS && (
-            <button
-              type="button"
-              onClick={addOption}
-              className="mt-3 text-sm text-brand-400 hover:text-brand-300 flex items-center gap-1 transition-colors"
-            >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M7 1v12M1 7h12" />
-              </svg>
-              {t("addOption")}
-            </button>
-          )}
-        </div>
-
-        {/* Pricing */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">{t("unitPrice")}</label>
-            <input
-              type="number"
-              value={unitPrice}
-              onChange={(e) => setUnitPrice(e.target.value)}
-              step="0.001"
-              min="0.001"
-              className="w-full px-4 py-3 bg-surface-100 border border-border rounded-xl focus:border-brand-500 outline-none transition-colors"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">{t("duration")}</label>
-            <input
-              type="number"
-              value={durationHours}
-              onChange={(e) => setDurationHours(e.target.value)}
-              min="1"
-              max="720"
-              className="w-full px-4 py-3 bg-surface-100 border border-border rounded-xl focus:border-brand-500 outline-none transition-colors"
-            />
-          </div>
-        </div>
-
-        {/* Creation Fee */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">Creation Fee</label>
-          <div className="w-full px-4 py-3 bg-surface-100 border border-border rounded-xl text-gray-400 text-sm">
-            0.5 SOL (flat platform fee — non-refundable once the poll has votes)
-          </div>
-        </div>
-
-        {/* Preview */}
-        <div className="bg-surface-100 border border-border rounded-2xl p-4 sm:p-6">
-          <h3 className="font-semibold mb-4 text-gray-300 flex items-center gap-2">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-brand-400"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
-            {t("tokenomicsPreview")}
-          </h3>
-          <div className="grid grid-cols-2 gap-2 sm:gap-3 text-sm">
-            <div className="text-gray-400">Creation fee (platform)</div>
-            <div className="text-right font-mono">{formatDollars(CREATION_FEE_PREVIEW)}</div>
-            <div className="text-gray-400">Voter pool seed</div>
-            <div className="text-right font-mono text-gray-500">0 SOL (voters fill it)</div>
-            <div className="text-gray-400">On settlement: creator gets</div>
-            <div className="text-right font-mono text-green-400">2% of voter pool</div>
-            <div className="text-gray-400">On settlement: winners share</div>
-            <div className="text-right font-mono text-brand-400">95% of voter pool</div>
-            <div className="text-gray-400 font-semibold border-t border-border pt-2">Total you pay now</div>
-            <div className="text-right font-mono font-semibold border-t border-border pt-2">{formatDollars(CREATION_FEE_PREVIEW)}</div>
-          </div>
-        </div>
-
-        {/* Balance check */}
-        {userAccount && (
-          <div className="text-sm text-gray-400">
-            {t("yourBalance")} <span className="text-brand-400 font-semibold">{formatDollars(userAccount.balance)}</span>
-          </div>
-        )}
-
-        {/* Submit */}
-        <button
-          type="submit"
-          disabled={submitting || imageUploading}
-          className={`w-full py-3.5 sm:py-4 rounded-2xl font-semibold text-base sm:text-lg transition-all transform hover:scale-[1.01] active:scale-[0.99] ${
-            submitting || imageUploading
-              ? "bg-gray-700 text-gray-500 cursor-not-allowed"
-              : "bg-brand-500 hover:bg-brand-600 shadow-lg shadow-brand-500/15"
-          }`}
-        >
-          {submitting
-            ? imageUploading
-              ? t("uploadingImages")
-              : t("creatingPoll")
-            : t("createPoll")}
-        </button>
+        {/* Pricing / Creation fee / Preview / Balance / Submit */}
+        <PricingSubmitSection
+          unitPrice={unitPrice}
+          setUnitPrice={setUnitPrice}
+          durationHours={durationHours}
+          setDurationHours={setDurationHours}
+          submitting={submitting}
+          imageUploading={imageUploading}
+        />
       </form>
     </div>
   );

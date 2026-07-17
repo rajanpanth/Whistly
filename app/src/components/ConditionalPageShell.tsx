@@ -2,12 +2,11 @@
 
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-
-const FAN_ROUTE_RE = /^\/(matchday|rooms\/|fan-leaderboard|fan-profile|recap\/)/;
+import { isFanRoute } from "@/lib/routes";
 
 export default function ConditionalPageShell({ children }: { children: ReactNode }) {
     const pathname = usePathname();
-    if (pathname && FAN_ROUTE_RE.test(pathname)) {
+    if (isFanRoute(pathname)) {
         return <div className="fan-app-host">{children}</div>;
     }
     // Keep this element and class string byte-for-byte equivalent to the

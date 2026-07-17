@@ -4,6 +4,7 @@ import { useState } from "react";
 import toast from "react-hot-toast";
 import type { DemoPoll } from "@/components/Providers";
 import ImageUpload from "@/components/ImageUpload";
+import Modal from "@/components/Modal";
 import { uploadPollImage, sanitizeImageUrl } from "@/lib/uploadImage";
 
 type EditUpdates = Partial<
@@ -113,14 +114,13 @@ export default function AdminEditModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-      onClick={onClose}
+    <Modal
+      isOpen
+      onClose={onClose}
+      maxWidth="max-w-lg"
+      title="Edit Poll (Admin)"
+      className="max-h-[90vh] overflow-y-auto p-6 space-y-4"
     >
-      <div
-        className="bg-surface-50 border border-border rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 space-y-4"
-        onClick={(e) => e.stopPropagation()}
-      >
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-white">✏️ Edit Poll (Admin)</h2>
           <button onClick={onClose} aria-label="Close" className="text-gray-400 hover:text-white text-xl">
@@ -240,7 +240,6 @@ export default function AdminEditModal({
             Cancel
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { copyToClipboard, getPollShareUrl, getTwitterShareUrl } from "@/lib/utils";
 import toast from "react-hot-toast";
 import { useLanguage } from "@/lib/languageContext";
@@ -15,6 +15,16 @@ type Props = {
 export default function ShareButton({ pollId, pollTitle, compact = false }: Props) {
   const [showMenu, setShowMenu] = useState(false);
   const { t } = useLanguage();
+
+  // Close the share menu on Escape (keyboard parity with the click-away backdrop).
+  useEffect(() => {
+    if (!showMenu) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowMenu(false);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [showMenu]);
 
   const handleCopyLink = async () => {
     const url = getPollShareUrl(pollId);
@@ -68,6 +78,8 @@ export default function ShareButton({ pollId, pollTitle, compact = false }: Prop
     <div className="relative">
       <button
         onClick={() => setShowMenu(!showMenu)}
+        aria-haspopup="menu"
+        aria-expanded={showMenu}
         className="flex items-center gap-2 px-4 py-2 bg-surface-100 hover:bg-dark-600 border border-border rounded-xl text-sm font-medium text-gray-300 transition-colors"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -83,9 +95,10 @@ export default function ShareButton({ pollId, pollTitle, compact = false }: Prop
       {showMenu && (
         <>
           {/* Backdrop to close menu */}
-          <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} />
-          <div className="absolute right-0 top-full mt-2 z-50 bg-surface-50 border border-border rounded-xl shadow-xl overflow-hidden min-w-[180px] animate-scaleIn">
+          <div className="fixed inset-0 z-40" onClick={() => setShowMenu(false)} aria-hidden="true" />
+          <div role="menu" className="absolute right-0 top-full mt-2 z-50 bg-surface-50 border border-border rounded-xl shadow-xl overflow-hidden min-w-[180px] animate-scaleIn">
             <button
+              role="menuitem"
               onClick={handleCopyLink}
               className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:bg-surface-100 transition-colors"
             >
@@ -96,6 +109,7 @@ export default function ShareButton({ pollId, pollTitle, compact = false }: Prop
               {t("copyLink")}
             </button>
             <button
+              role="menuitem"
               onClick={handleTwitter}
               className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:bg-surface-100 transition-colors"
             >
@@ -105,6 +119,7 @@ export default function ShareButton({ pollId, pollTitle, compact = false }: Prop
               {t("shareOnX")}
             </button>
             <button
+              role="menuitem"
               onClick={handleCopyEmbed}
               className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-300 hover:bg-surface-100 transition-colors"
             >
