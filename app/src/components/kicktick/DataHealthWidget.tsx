@@ -27,10 +27,10 @@ const STATE_LABEL: Record<ServiceState, string> = {
 };
 
 function badgeClasses(state: ServiceState | "loading"): string {
-  if (state === "connected") return "bg-[#20d38a]/10 text-[#7ce8bb]";
+  if (state === "connected") return "bg-[#20d38a]/10 text-[color:var(--market-positive-soft)]";
   if (state === "mock") return "bg-[#e6ff3e]/10 text-[#d8ec52]";
-  if (state === "error") return "bg-[#fa4669]/10 text-[#f78ba0]";
-  return "bg-white/[0.06] text-[#a1a1aa]";
+  if (state === "error") return "bg-[#fa4669]/10 text-[color:var(--market-live-soft)]";
+  return "bg-white/[0.06] text-[color:var(--market-text-2)]";
 }
 
 export default function DataHealthWidget({ compact = false }: { connected?: boolean; compact?: boolean }) {
@@ -71,18 +71,18 @@ export default function DataHealthWidget({ compact = false }: { connected?: bool
   ] : [];
 
   return (
-    <section className="rounded-xl border border-[#29292f] bg-[#141418] p-4">
+    <section className="rounded-xl border border-[color:var(--market-border)] bg-[color:var(--market-panel)] p-4">
       <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 font-heading text-sm font-bold text-[#f4f4f5]"><Activity size={16} className="text-[#20d38a]" />TxLINE Data Health</div>
+        <div className="flex items-center gap-2 font-heading text-sm font-bold text-[color:var(--market-text)]"><Activity size={16} className="text-[color:var(--market-positive)]" />TxLINE Data Health</div>
         <span className={"rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider " + badgeClasses(headline)}><span className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-current" />{headlineLabel}</span>
       </div>
       <div className={"mt-4 grid gap-2 text-xs " + (compact ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3")}>
-        {rows.map(([label, value]) => <div key={label} className="rounded-lg border border-[#232328] bg-white/[0.03] p-2.5"><div className="text-[#6f6f78]">{label}</div><div className="mt-1 font-semibold text-[#e6e6e9]">{value}</div></div>)}
-        {!status && !failed && <div className="col-span-2 rounded-lg border border-[#232328] bg-white/[0.03] p-2.5 text-[#6f6f78]">Checking TxLINE status…</div>}
-        {failed && <div className="col-span-2 rounded-lg border border-[#232328] bg-white/[0.03] p-2.5 text-[#f78ba0]">Status endpoint unreachable.</div>}
+        {rows.map(([label, value]) => <div key={label} className="rounded-lg border border-[#232328] bg-white/[0.03] p-2.5"><div className="text-[color:var(--market-text-3)]">{label}</div><div className="mt-1 font-semibold text-[#e6e6e9]">{value}</div></div>)}
+        {!status && !failed && <div className="col-span-2 rounded-lg border border-[#232328] bg-white/[0.03] p-2.5 text-[color:var(--market-text-3)]">Checking TxLINE status…</div>}
+        {failed && <div className="col-span-2 rounded-lg border border-[#232328] bg-white/[0.03] p-2.5 text-[color:var(--market-live-soft)]">Status endpoint unreachable.</div>}
       </div>
       {status && !status.connected && (
-        <div className="mt-3 flex items-start gap-2 text-xs leading-5 text-[#a1a1aa]">
+        <div className="mt-3 flex items-start gap-2 text-xs leading-5 text-[color:var(--market-text-2)]">
           <Database size={13} className="mt-0.5 shrink-0 text-[#d8ec52]" />
           {status.mockModeEnabled
             ? "Mock Mode Enabled — not real TxLINE data. Settlement uses labeled mock scores."

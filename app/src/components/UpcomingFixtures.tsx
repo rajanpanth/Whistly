@@ -96,15 +96,15 @@ export default function UpcomingFixtures({ limit = 8 }: { limit?: number }) {
         <div className="flex items-center gap-2">
           {source && (
             <span className="flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-[0.14em] text-[#8b8b94]">
-              <span className={"h-1.5 w-1.5 animate-pulse rounded-full " + (source === "txline" ? "bg-[#20d38a]" : "bg-[#e6ff3e]")} aria-hidden="true" />
+              <span className={"h-1.5 w-1.5 animate-pulse rounded-full " + (source === "txline" ? "bg-[color:var(--market-positive)]" : "bg-[color:var(--market-promo)]")} aria-hidden="true" />
               {source === "txline" ? "Live feed" : "Demo feed"}
             </span>
           )}
-          <button type="button" onClick={load} aria-label="Refresh fixtures" className="grid h-7 w-7 place-items-center rounded-lg border border-white/[0.07] bg-white/[0.03] text-[#a1a1aa] transition-colors hover:border-white/20 hover:text-white"><RefreshCw size={13} /></button>
+          <button type="button" onClick={load} aria-label="Refresh fixtures" className="grid h-7 w-7 place-items-center rounded-lg border border-white/[0.07] bg-white/[0.03] text-[color:var(--market-text-2)] transition-colors hover:border-white/20 hover:text-white"><RefreshCw size={13} /></button>
         </div>
       </div>
 
-      {state === "loading" && <p className="mt-3 text-sm text-[#6f6f78]">Loading fixture feed…</p>}
+      {state === "loading" && <p className="mt-3 text-sm text-[color:var(--market-text-3)]">Loading fixture feed…</p>}
       {state === "not_configured" && (
         <p className="mt-3 rounded-lg border border-[#fa4669]/25 bg-[#fa4669]/[0.06] p-3 text-xs leading-5 text-[#f8c0cb]">
           TxLINE Not Configured — no fixture data. Activate the free World Cup tier on the
@@ -112,7 +112,7 @@ export default function UpcomingFixtures({ limit = 8 }: { limit?: number }) {
         </p>
       )}
       {state === "error" && <p className="mt-3 rounded-lg border border-[#fa4669]/25 bg-[#fa4669]/[0.06] p-3 text-xs text-[#f8c0cb]">TxLINE Error — fixture request failed.</p>}
-      {state === "ready" && upcoming.length === 0 && <p className="mt-3 text-sm text-[#6f6f78]">No upcoming fixtures in the feed right now.</p>}
+      {state === "ready" && upcoming.length === 0 && <p className="mt-3 text-sm text-[color:var(--market-text-3)]">No upcoming fixtures in the feed right now.</p>}
 
       {state === "ready" && upcoming.length > 0 && (
         <ul className="mt-4 space-y-2.5">
@@ -126,19 +126,19 @@ export default function UpcomingFixtures({ limit = 8 }: { limit?: number }) {
                   ? "border-[#20d38a]/25 bg-gradient-to-br from-[#20d38a]/[0.07] via-transparent to-transparent"
                   : "border-white/[0.06] bg-[#101014] hover:border-white/[0.14]")}
               >
-                {next && <span className="absolute -top-2 right-3 rounded-full border border-[#20d38a]/30 bg-[#0d1f17] px-2 py-0.5 text-[8.5px] font-extrabold uppercase tracking-[0.16em] text-[#7ce8bb]">Next up</span>}
+                {next && <span className="absolute -top-2 right-3 rounded-full border border-[#20d38a]/30 bg-[#0d1f17] px-2 py-0.5 text-[8.5px] font-extrabold uppercase tracking-[0.16em] text-[color:var(--market-positive-soft)]">Next up</span>}
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0 flex-1 space-y-1.5">
                     <TeamRow name={fixture.homeTeam} />
                     <TeamRow name={fixture.awayTeam} />
                   </div>
-                  <span className={"shrink-0 rounded-lg px-2 py-1.5 font-mono text-[11px] font-bold " + (next ? "bg-[#20d38a]/15 text-[#7ce8bb]" : "bg-white/[0.05] text-[#c9c9ce]")}>
+                  <span className={"shrink-0 rounded-lg px-2 py-1.5 font-mono text-[11px] font-bold " + (next ? "bg-[#20d38a]/15 text-[color:var(--market-positive-soft)]" : "bg-white/[0.05] text-[#c9c9ce]")}>
                     {kickoffLabel(fixture)}
                   </span>
                 </div>
                 <div className="mt-2.5 flex items-center justify-between border-t border-white/[0.05] pt-2 text-[10px]">
                   <span className="font-extrabold uppercase tracking-[0.13em] text-[#8b8b94]">{stageLabel(fixture.competition)}</span>
-                  <span className="text-[#6f6f78]">{kickoffTime(fixture)}</span>
+                  <span className="text-[color:var(--market-text-3)]">{kickoffTime(fixture)}</span>
                 </div>
               </li>
             );

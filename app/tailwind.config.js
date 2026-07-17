@@ -18,8 +18,11 @@ module.exports = {
           200: "#8afff1",
           300: "#4df5e1",
           400: "#1ae6cc",
-          500: "#00d4aa",
-          600: "#00ab8a",
+          // 500/600 read from CSS variables (globals.css) so Tailwind brand
+          // classes follow the light/dark theme like var(--brand) does.
+          // Values are identical to the old constants in dark mode.
+          500: "rgb(var(--brand-rgb) / <alpha-value>)",
+          600: "rgb(var(--brand-hover-rgb) / <alpha-value>)",
           700: "#00876e",
           800: "#006a57",
           900: "#004d40",

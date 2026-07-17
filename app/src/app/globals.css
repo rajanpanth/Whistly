@@ -23,6 +23,10 @@
   --input-border: #2a2a2a;
   --brand: #00d4aa;
   --brand-dim: rgba(0, 212, 170, 0.15);
+  /* RGB channels for Tailwind brand tokens (see tailwind.config.js) so
+     bg-brand-500/40 etc. stay theme-aware with opacity modifiers. */
+  --brand-rgb: 0 212 170;
+  --brand-hover-rgb: 0 171 138;
 }
 
 /* Light mode overrides */
@@ -40,6 +44,8 @@ html:not(.dark) {
   --input-border: #e5e5e5;
   --brand: #00ab8a;
   --brand-dim: rgba(0, 171, 138, 0.1);
+  --brand-rgb: 0 171 138;
+  --brand-hover-rgb: 0 135 110;
 }
 
 html:not(.dark) body {
@@ -142,7 +148,10 @@ html:not(.dark) .card-hover:hover {
   --market-border: #29292f;
   --market-border-strong: #3b3b43;
   --market-positive: #20d38a;
+  --market-positive-soft: #7ce8bb;
   --market-live: #fa4669;
+  --market-live-soft: #f78ba0;
+  --market-panel: #141418;
   --market-promo: #e6ff3e;
   --market-accent: #99f6e4;
   --market-focus: #67e8f9;
