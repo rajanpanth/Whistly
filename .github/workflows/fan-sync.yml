@@ -1,0 +1,39 @@
+name: Fan Matchday sync
+
+# Keeps live-fixture scoring moving even when no fan has a tab open.
+# Page reads already sync on demand; this is the belt-and-braces crank.
+# Requires repo secret FAN_CRON_SECRET (same value as the Vercel env var).
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sync live fixtures
+        env:
+          FAN_CRON_SECRET: ${{ secrets.FAN_CRON_SECRET }}
+        run: |
+          if [ -z "$FAN_CRON_SECRET" ]; then
+            echo "FAN_CRON_SECRET secret not set — skipping"; exit 0
+          fi
+          BASE="https://www.whistly.tech"
+          FIXTURES=$(curl -sf "$BASE/api/fan/fixtures" | \
+            node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{ \
+              const j=JSON.parse(d); \
+              const live=(j.fixtures||[]).filter(f=>f.status==='LIVE'||f.status==='FINISHED'&&Date.now()-f.lastUpdateMs<3600000); \
+              console.log(live.map(f=>f.fixtureId).join(' '))})")
+          if [ -z "$FIXTURES" ]; then
+            echo "no live fixtures right now"; exit 0
+          fi
+          for ID in $FIXTURES; do
+            echo "syncing fixture $ID"
+            curl -sf -X POST "$BASE/api/fan/internal/sync-fixture" \
+              -H "content-type: application/json" \
+              -H "x-fan-cron-secret: $FAN_CRON_SECRET" \
+              -d "{\"fixtureId\":\"$ID\"}" | head -c 200
+            echo
+          done
