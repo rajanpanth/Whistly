@@ -23,7 +23,7 @@ const spaceGrotesk = Space_Grotesk({
 
 export const metadata: Metadata = {
   title: {
-    default: "Whistly — Decentralized Prediction Polls",
+    default: "Whistly",
     template: "%s | Whistly",
   },
   description:
@@ -35,13 +35,13 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     siteName: "Whistly",
-    title: "Whistly — Decentralized Prediction Polls",
+    title: "Whistly",
     description: "Vote on prediction polls with play money. Winners take the losing pool. Powered by Solana.",
     images: ["/api/og"],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Whistly — Decentralized Prediction Polls",
+    title: "Whistly",
     description: "Vote on prediction polls with play money. Winners take the losing pool.",
     images: ["/api/og"],
   },
@@ -50,8 +50,8 @@ export const metadata: Metadata = {
     follow: true,
   },
   icons: {
-    icon: "/icon-512.png",
-    apple: "/icon-512.png",
+    icon: "/icon-512.png?v=2",
+    apple: "/icon-512.png?v=2",
   },
 };
 
