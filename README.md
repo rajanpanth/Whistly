@@ -17,7 +17,7 @@
 
 **[🌐 Live site](https://www.whistly.tech)** · **[🐦 Launch tweet](https://x.com/Rajan_panth/status/2076665226385383547)**
 
-*Built for the TxODDS World Cup Hackathon · Track: Prediction Markets & Settlement*
+*Built for the TxODDS World Cup Hackathon · Tracks: Prediction Markets & Settlement · Consumer & Fan Experiences*
 
 </div>
 
