@@ -15,7 +15,7 @@
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**[🌐 Live site](https://www.whistly.tech)** · **[🎬 Demo video](https://youtu.be/5bS-cCdrJHY)** · **[🐦 Launch tweet](https://x.com/Rajan_panth/status/2076665226385383547)**
+**[🌐 Live site](https://www.whistly.tech)** · **[🐦 Launch tweet](https://x.com/Rajan_panth/status/2076665226385383547)**
 
 *Built for the TxODDS World Cup Hackathon · Track: Prediction Markets & Settlement*
 
@@ -24,7 +24,7 @@
 ---
 
 > [!NOTE]
-> **Whistly is live during the 2026 World Cup** with real TxLINE fixtures — the homepage shows the actual semi-finals with countdowns to real kickoff times, and settled quarter-finals resolved from final scores. This project was built specifically for WC 2026; if you're reviewing after the tournament, live fixtures will have finished — the [demo video](https://youtu.be/5bS-cCdrJHY) captures the full flow.
+> **Whistly is live during the 2026 World Cup** with real TxLINE fixtures — the homepage shows the actual semi-finals with countdowns to real kickoff times, and settled quarter-finals resolved from final scores. This project was built specifically for WC 2026; if you're reviewing after the tournament, live fixtures will have finished.
 >
 > **Devnet SOL only — no real money.** When TxLINE credentials are not configured, the app **fails closed** (settlement disabled) rather than faking data.
 
