@@ -46,7 +46,7 @@ export const SPORT_TABS = ["All markets", "Goals", "Totals", "Goal Gap", "Match 
 /* 2026 FIFA World Cup — the final is set (kick-offs converted from NPT to UTC).
    Semi-final 1: France 0–2 Spain (FT Jul 13)
    Semi-final 2: England 1–2 Argentina (FT Jul 16)
-   Third place:  France vs England — Jul 19 02:45 NPT → Jul 18 21:00 UTC
+   Third place:  France 4–6 England (FT Jul 19)
    Final:        Spain vs Argentina — Jul 20 00:45 NPT → Jul 19 19:00 UTC */
 export const KICKOFFS = {
   thirdPlace: "2026-07-18T21:00:00Z",
@@ -54,10 +54,10 @@ export const KICKOFFS = {
 } as const;
 
 export const NEXT_KICKOFF = {
-  title: "France vs England",
-  label: "Third place",
-  countdown: "2d : 15h : 59m : 0s",
-  kickoff: KICKOFFS.thirdPlace,
+  title: "Spain vs Argentina",
+  label: "Final",
+  countdown: "0d : 13h : 59m : 0s",
+  kickoff: KICKOFFS.final,
 } as const;
 
 export const FEATURED_MARKETS: MarketplaceMarket[] = [
@@ -121,7 +121,7 @@ export const FEATURED_MARKETS: MarketplaceMarket[] = [
 
 export const FEATURED_MARKET = FEATURED_MARKETS[0];
 
-/* No matches are being played right now — the next fixture is the third-place play-off. */
+/* No matches are being played right now — the next fixture is the final. */
 export const LIVE_MARKETS: MarketplaceMarket[] = [];
 
 export const SOCCER_SPOTLIGHT: MarketplaceMarket = {
@@ -212,23 +212,22 @@ export const SPORTS_MARKETS: MarketplaceMarket[] = [
       { label: "No", symbol: "NO", price: "$152", probability: 66 },
     ],
   },
-  /* ── Upcoming: third-place play-off ── */
+  /* ── Settled: third place (France 4–6 England, Jul 19) ── */
   {
     id: "third-place-result",
     title: "France vs England",
     competition: "World Cup 2026 · Third place",
     sport: "Match Result",
-    status: "upcoming",
-    countdown: "2d : 15h : 59m : 0s",
-    kickoff: KICKOFFS.thirdPlace,
-    question: "Who takes third place? · Jul 19, 2:45 am NPT",
+    status: "ended",
+    score: "4 – 6",
+    endedAt: "Jul 19",
+    question: "Who takes third place?",
     pool: "6.4 SOL",
-    combo: true,
     href: "/world-cup",
-    tags: ["Upcoming", "Match Result"],
+    tags: ["Settled", "Match Result"],
     outcomes: [
-      { label: "France", symbol: "FRA", price: "$182", probability: 55 },
-      { label: "England", symbol: "ENG", price: "$222", probability: 45 },
+      { label: "France", symbol: "FRA", price: "$0", probability: 0 },
+      { label: "England", symbol: "ENG", price: "$100", probability: 100, won: true },
     ],
   },
   {
@@ -236,16 +235,15 @@ export const SPORTS_MARKETS: MarketplaceMarket[] = [
     title: "Over 2.5 goals — France vs England",
     competition: "World Cup 2026 · Third place",
     sport: "Totals",
-    status: "upcoming",
-    countdown: "2d : 15h : 59m : 0s",
-    kickoff: KICKOFFS.thirdPlace,
-    question: "Third-place play-off · Jul 19, 2:45 am NPT",
+    status: "ended",
+    score: "4 – 6",
+    endedAt: "Jul 19",
     pool: "2.8 SOL",
     href: "/world-cup",
-    tags: ["Upcoming", "Totals", "Goals"],
+    tags: ["Settled", "Totals", "Goals"],
     outcomes: [
-      { label: "Over 2.5 goals", symbol: "OVR", price: "$161", probability: 62 },
-      { label: "Under 2.5 goals", symbol: "UND", price: "$263", probability: 38 },
+      { label: "Over 2.5 goals", symbol: "OVR", price: "$100", probability: 100, won: true },
+      { label: "Under 2.5 goals", symbol: "UND", price: "$0", probability: 0 },
     ],
   },
   /* ── Settled: semi-final 2 (England 1–2 Argentina, Jul 16) ── */

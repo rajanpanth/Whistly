@@ -16,7 +16,7 @@ import CountdownTimer from "./CountdownTimer";
 const QUICK_PICKS = ["Goal", "Cards", "Corners", "Result"];
 
 const PROMO_SLIDES = [
-  { kicker: "World Cup Demo Mode", heading: "The final is set.", copy: "Spain vs Argentina — Jul 20, 12:45 am NPT. France and England play for third on Jul 19. Live micro-markets open at kickoff, built on Solana devnet.", cta: "See final markets", href: "/world-cup" },
+  { kicker: "World Cup Demo Mode", heading: "The final is set.", copy: "Spain vs Argentina — Jul 20, 12:45 am NPT. England beat France 6–4 to take third on Jul 19. Live micro-markets open at kickoff, built on Solana devnet.", cta: "See final markets", href: "/world-cup" },
   { kicker: "Builder demo offer", heading: "Practice with devnet SOL.", copy: "Every position, lock, and payout is verifiable on-chain. No real money is involved in demo mode.", cta: "Get devnet SOL", href: "/docs" },
 ] as const;
 
@@ -106,7 +106,7 @@ export default function MarketplaceHome() {
   const markets = useMemo(() => activeSport === "All markets" ? SPORTS_MARKETS : SPORTS_MARKETS.filter(market => market.sport.toLowerCase().includes(activeSport.toLowerCase()) || market.tags.some(tag => tag.toLowerCase().includes(activeSport.toLowerCase()))), [activeSport]);
   // Markets already shown in the Soccer spotlight are excluded from the
   // themed sections below so no card appears twice on the page.
-  const spotlightIdSet = new Set(["final-o25", "final-btts", "final-extra-time", "third-place-result"]);
+  const spotlightIdSet = new Set(["final-o25", "final-btts", "final-extra-time"]);
   const groups = [
     { title: "World Cup goals", filter: "Goals", items: markets.filter(m => (m.sport === "Goals" || m.sport === "Totals" || m.tags.includes("Goals")) && m.status !== "ended" && !spotlightIdSet.has(m.id)) },
     { title: "Match result", filter: "Match Result", items: markets.filter(m => (m.sport === "Match Result" || m.tags.includes("Match Result")) && m.status !== "ended" && !spotlightIdSet.has(m.id)) },
