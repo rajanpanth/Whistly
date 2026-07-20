@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -46,8 +47,8 @@ export default function TradingHeader() {
                 <strong>Devnet SOL has no real-money value.</strong>
             </div>
             <header className="wt-header">
-                <Link href="/markets" className="wt-brand">
-                    <span className="wt-brand-dot">W</span>
+                <Link href="/" className="wt-brand" aria-label="Whistly home">
+                    <Image src="/brand-logo.png" alt="" width={38} height={22} priority className="wt-brand-logo" />
                     Whistly
                 </Link>
                 <form
