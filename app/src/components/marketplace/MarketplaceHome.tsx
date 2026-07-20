@@ -16,6 +16,7 @@ const QUICK_PICKS = ["Goal", "Cards", "Corners", "Result"];
 
 const PROMO_SLIDES = [
   { kicker: "World Cup Demo Mode", heading: "Spain are world champions.", copy: "Spain beat Argentina 1–0 in the Jul 20 final. Every knockout market settled from real final scores — verifiable on Solana devnet.", cta: "See settled markets", href: "/world-cup" },
+  { kicker: "TxODDS World Cup Hackathon", heading: "Built for the hackathon.", copy: "$50K across three tracks — markets, trading agents, and fan experiences — all powered by TxODDS' live football API on Solana. The free World Cup API tier has now ended.", cta: "About Whistly", href: "/about" },
   { kicker: "Builder demo offer", heading: "Practice with devnet SOL.", copy: "Every position, lock, and payout is verifiable on-chain. No real money is involved in demo mode.", cta: "Get devnet SOL", href: "/docs" },
 ] as const;
 

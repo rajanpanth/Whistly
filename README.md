@@ -17,7 +17,7 @@
 
 **[🌐 Live site](https://www.whistly.tech)** · **[🐦 Launch tweet](https://x.com/Rajan_panth/status/2076665226385383547)**
 
-*Built for the TxODDS World Cup Hackathon · Tracks: Prediction Markets & Settlement · Consumer & Fan Experiences*
+*Built for the TxODDS World Cup Hackathon — real-time match data wired into real products. $50K across three tracks: **Markets**, **Trading Agents**, and **Fan Experiences**, all powered by TxODDS' live football API on Solana. Whistly competes in Markets & Fan Experiences.*
 
 </div>
 
@@ -25,6 +25,8 @@
 
 > [!NOTE]
 > **Whistly ran live through the 2026 World Cup** with real TxLINE fixtures — Spain beat Argentina 1–0 in the Jul 20 final to lift the trophy. The homepage now shows the full knockout stage — quarter-finals, semi-finals, third place, and the final — settled from real final scores, never majority vote.
+>
+> **The tournament — and TxODDS' free World Cup API tier — have now ended**, so live fixture data is no longer served. The settled markets above were resolved while the feed was live; for an interactive walkthrough use the labeled mock mode below.
 >
 > **Devnet SOL only — no real money.** When TxLINE credentials are not configured, the app **fails closed** (settlement disabled) rather than faking data.
 
@@ -95,6 +97,8 @@ Whistly talks to the real TxLINE API (`txline-dev.txodds.com`) using the documen
 | `POST /api/token/activate` | Free-tier activation (wallet-signed) → data API token |
 
 ### One-click free-tier activation
+
+> **Note:** the free World Cup tier ended with the tournament — the flow below worked throughout the event and is kept for reference / paid-tier reuse.
 
 TxLINE's free World Cup tier requires a one-time on-chain subscription. Whistly builds and sends it **from the user's wallet** at [`/txline-setup`](https://www.whistly.tech/txline-setup):
 
@@ -213,7 +217,7 @@ NEXT_PUBLIC_ADMIN_WALLETS=                      # comma-separated house/admin wa
 AUTH_JWT_SECRET=                                # random secret for wallet sign-in JWTs
 ```
 
-**To get real data:** open `/txline-setup` with a devnet-funded wallet and click **Activate with wallet** — the issued token is logged server-side so you can persist it as `TXLINE_API_TOKEN`. Alternatively run the official TxODDS `subscription_free_tier.ts` script and paste the token.
+**To get real data:** open `/txline-setup` with a devnet-funded wallet and click **Activate with wallet** — the issued token is logged server-side so you can persist it as `TXLINE_API_TOKEN`. Alternatively run the official TxODDS `subscription_free_tier.ts` script and paste the token. *(The free World Cup tier ended with the tournament, so activation no longer returns live data.)*
 
 **For a labeled demo without credentials:** set `NEXT_PUBLIC_ENABLE_MOCK_MODE=true` — all mock data is clearly labeled in the UI, and `/live` gains demo scenario controls (simulate goal / no goal) that exercise the same on-chain settlement path.
 

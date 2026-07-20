@@ -31,7 +31,21 @@ export default function AboutPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-amber-400/15 bg-amber-400/[0.04] p-6 text-sm leading-6 text-amber-100/80">
+      <section className="rounded-2xl border border-[#29292f] bg-[#141418] p-8">
+        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-[#20d38a]"><Trophy size={16} /> TxODDS World Cup Hackathon</div>
+        <p className="mt-4 text-base leading-7 text-[#c9c9ce]">
+          Whistly was built for the TxODDS World Cup Hackathon — a World Cup hackathon for builders who want
+          real-time match data wired into real products. <strong className="text-white">$50K across three tracks:
+          markets, trading agents, and fan experiences</strong> — all powered by TxODDS&apos; live football API on Solana.
+          Whistly competes in the markets and fan experiences tracks.
+        </p>
+        <p className="mt-3 text-sm leading-6 text-[#a1a1aa]">
+          The 2026 tournament — and the free World Cup API tier — have now ended. Every knockout market on the
+          homepage was settled from real final scores while the feed was live.
+        </p>
+      </section>
+
+      <section className="mt-6 rounded-2xl border border-amber-400/15 bg-amber-400/[0.04] p-6 text-sm leading-6 text-amber-100/80">
         <strong className="text-[#a8ab8a]">Demo notice.</strong> Whistly is an independent hackathon demo. Demo tokens have no monetary value, and simulated TxLINE-compatible data may be used where live credentials are unavailable.
       </section>
     </main>

@@ -46,7 +46,8 @@ export default function TxLineSetupPage() {
             To connect to real TxLINE endpoints, configure TXLINE_BASE_URL,
             TXLINE_GUEST_JWT, and TXLINE_API_TOKEN in your environment variables.
             Mock data is only used when NEXT_PUBLIC_ENABLE_MOCK_MODE=true and is
-            clearly labeled.
+            clearly labeled. Note: TxODDS&apos; free World Cup API tier ended with
+            the tournament, so free-tier activation no longer returns live data.
           </div>
         </div>
       </div>
@@ -90,8 +91,8 @@ export default function TxLineSetupPage() {
           </h2>
         </div>
         <p className="mt-2 text-sm text-slate-400">
-          For World Cup free-tier access and API documentation, visit the
-          TxLINE docs.
+          The free World Cup tier ran during the tournament and has now ended.
+          For API documentation and paid access, visit the TxLINE docs.
         </p>
         <div className="mt-3 flex gap-3 text-sm">
           <a

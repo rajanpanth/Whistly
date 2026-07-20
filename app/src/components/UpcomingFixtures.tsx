@@ -107,7 +107,8 @@ export default function UpcomingFixtures({ limit = 8 }: { limit?: number }) {
       {state === "loading" && <p className="mt-3 text-sm text-[color:var(--market-text-3)]">Loading fixture feed…</p>}
       {state === "not_configured" && (
         <p className="mt-3 rounded-lg border border-[#fa4669]/25 bg-[#fa4669]/[0.06] p-3 text-xs leading-5 text-[#f8c0cb]">
-          TxLINE Not Configured — no fixture data. Activate the free World Cup tier on the
+          TxLINE Not Configured — no fixture data. TxODDS&apos; free World Cup API tier ended with the
+          tournament; see the
           <Link href="/txline-setup" className="ml-1 font-bold underline">TxLINE setup page</Link>, or enable mock mode explicitly.
         </p>
       )}
