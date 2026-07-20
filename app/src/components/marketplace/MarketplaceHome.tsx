@@ -9,14 +9,13 @@ import { Activity, ArrowUpRight, CheckCircle2, ChevronLeft, ChevronRight, Circle
 const WalletConnectModal = dynamic(() => import("@/components/WalletConnectModal"), { ssr: false });
 import { useApp } from "@/components/Providers";
 import UpcomingFixtures from "@/components/UpcomingFixtures";
-import { FEATURED_MARKETS, LIVE_MARKETS, NEXT_KICKOFF, SOCCER_SPOTLIGHT, SPORTS_MARKETS, SPORT_TABS } from "@/lib/marketplaceData";
+import { FEATURED_MARKETS, LIVE_MARKETS, SOCCER_SPOTLIGHT, SPORTS_MARKETS, SPORT_TABS, TOURNAMENT_RESULT } from "@/lib/marketplaceData";
 import { FeaturedMarketCard, LiveMarketCard, MarketCard, SoccerSpotlightCard } from "./MarketCards";
-import CountdownTimer from "./CountdownTimer";
 
 const QUICK_PICKS = ["Goal", "Cards", "Corners", "Result"];
 
 const PROMO_SLIDES = [
-  { kicker: "World Cup Demo Mode", heading: "The final is set.", copy: "Spain vs Argentina — Jul 20, 12:45 am NPT. England beat France 6–4 to take third on Jul 19. Live micro-markets open at kickoff, built on Solana devnet.", cta: "See final markets", href: "/world-cup" },
+  { kicker: "World Cup Demo Mode", heading: "Spain are world champions.", copy: "Spain beat Argentina 1–0 in the Jul 20 final. Every knockout market settled from real final scores — verifiable on Solana devnet.", cta: "See settled markets", href: "/world-cup" },
   { kicker: "Builder demo offer", heading: "Practice with devnet SOL.", copy: "Every position, lock, and payout is verifiable on-chain. No real money is involved in demo mode.", cta: "Get devnet SOL", href: "/docs" },
 ] as const;
 
@@ -108,9 +107,8 @@ export default function MarketplaceHome() {
   // themed sections below so no card appears twice on the page.
   const spotlightIdSet = new Set(["final-o25", "final-btts", "final-extra-time"]);
   const groups = [
-    { title: "World Cup goals", filter: "Goals", items: markets.filter(m => (m.sport === "Goals" || m.sport === "Totals" || m.tags.includes("Goals")) && m.status !== "ended" && !spotlightIdSet.has(m.id)) },
-    { title: "Match result", filter: "Match Result", items: markets.filter(m => (m.sport === "Match Result" || m.tags.includes("Match Result")) && m.status !== "ended" && !spotlightIdSet.has(m.id)) },
-    { title: "Settled knockout matches", filter: "Settled", items: markets.filter(m => m.status === "ended") },
+    { title: "Match result — settled", filter: "Match Result", items: markets.filter(m => (m.sport === "Match Result" || m.tags.includes("Match Result")) && !spotlightIdSet.has(m.id)) },
+    { title: "Goals & totals — settled", filter: "Goals", items: markets.filter(m => (m.sport === "Goals" || m.sport === "Totals" || m.tags.includes("Goals")) && !spotlightIdSet.has(m.id)) },
   ];
   const spotlightGrid = SPORTS_MARKETS.filter(m => spotlightIdSet.has(m.id));
 
@@ -143,7 +141,7 @@ export default function MarketplaceHome() {
           <header className="market-section-header"><div><span className="market-live-dot" aria-hidden="true" /><h2 id="live-markets-title">Live now <span>({LIVE_MARKETS.length})</span></h2></div><Link href="/live">Open live board <ChevronRight size={16} /></Link></header>
           {LIVE_MARKETS.length > 0
             ? <div className="market-live-grid">{LIVE_MARKETS.slice(0, 3).map(market => <LiveMarketCard market={market} key={market.id} />)}</div>
-            : <div className="market-live-empty"><span>No matches are live right now.</span><span>Next kickoff — <strong>{NEXT_KICKOFF.title}</strong> ({NEXT_KICKOFF.label}) in</span><CountdownTimer value={NEXT_KICKOFF.countdown} target={NEXT_KICKOFF.kickoff} /><Link href="/world-cup">See schedule <ChevronRight size={14} /></Link></div>}
+            : <div className="market-live-empty"><span>The tournament is complete.</span><span>🏆 <strong>{TOURNAMENT_RESULT.headline}</strong> · {TOURNAMENT_RESULT.detail}</span><Link href="/world-cup">See settled markets <ChevronRight size={14} /></Link></div>}
         </section>
 
         <section className="market-section" aria-labelledby="soccer-spotlight-title">

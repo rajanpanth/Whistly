@@ -24,7 +24,7 @@
 ---
 
 > [!NOTE]
-> **Whistly is live during the 2026 World Cup** with real TxLINE fixtures — the homepage shows the actual semi-finals with countdowns to real kickoff times, and settled quarter-finals resolved from final scores. This project was built specifically for WC 2026; if you're reviewing after the tournament, live fixtures will have finished.
+> **Whistly ran live through the 2026 World Cup** with real TxLINE fixtures — Spain beat Argentina 1–0 in the Jul 20 final to lift the trophy. The homepage now shows the full knockout stage — quarter-finals, semi-finals, third place, and the final — settled from real final scores, never majority vote.
 >
 > **Devnet SOL only — no real money.** When TxLINE credentials are not configured, the app **fails closed** (settlement disabled) rather than faking data.
 

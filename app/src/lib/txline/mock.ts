@@ -47,7 +47,7 @@ let scenario: DemoScenario = "BASE";
 /* Real 2026 World Cup knockout schedule (kick-offs in UTC). */
 const scheduledFixtures: Omit<TxLineFixture, "updatedAt">[] = [
   { fixtureId: "wc2026-third-place", homeTeam: "France", awayTeam: "England", competition: "World Cup · Third place", status: "FINISHED", clockSeconds: 90 * 60, homeScore: 4, awayScore: 6, startTimeMs: Date.UTC(2026, 6, 18, 21, 0) },
-  { fixtureId: "wc2026-final", homeTeam: "Spain", awayTeam: "Argentina", competition: "World Cup · Final", status: "SCHEDULED", clockSeconds: 0, homeScore: 0, awayScore: 0, startTimeMs: Date.UTC(2026, 6, 19, 19, 0) },
+  { fixtureId: "wc2026-final", homeTeam: "Spain", awayTeam: "Argentina", competition: "World Cup · Final", status: "FINISHED", clockSeconds: 90 * 60, homeScore: 1, awayScore: 0, startTimeMs: Date.UTC(2026, 6, 19, 19, 0) },
 ];
 
 export function getMockFixtures(): TxLineFixture[] {

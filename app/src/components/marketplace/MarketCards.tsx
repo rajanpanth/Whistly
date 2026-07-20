@@ -59,7 +59,7 @@ export function FeaturedMarketCard({ market }: { market: MarketplaceMarket }) {
   return <article className="market-featured">
     <div className="market-featured-art" aria-hidden="true"><span /><span /><span /></div>
     <div className="market-card-top">
-      {isLive ? <span className="market-live-meta-inline"><LiveBadge /><span>{market.clock}</span><strong>{market.score}</strong><em className="market-hero-flag">World Cup · Devnet demo</em></span> : market.countdown && <CountdownBadge value={market.countdown} target={market.kickoff} />}
+      {isLive ? <span className="market-live-meta-inline"><LiveBadge /><span>{market.clock}</span><strong>{market.score}</strong><em className="market-hero-flag">World Cup · Devnet demo</em></span> : market.status === "ended" ? <EndedBadge market={market} /> : market.countdown && <CountdownBadge value={market.countdown} target={market.kickoff} />}
       <span className="market-top-right">
         {market.combo && <ComboBadge />}
         <span className="market-brand-mark"><Activity size={11} /> Whistly <em>Markets</em></span>
@@ -70,7 +70,7 @@ export function FeaturedMarketCard({ market }: { market: MarketplaceMarket }) {
         <p className="market-competition"><CircleDot size={13} />{market.competition}</p>
         <h1><Link href={market.href}>{market.title}</Link></h1>
         {market.question && <p className="market-hero-question">{market.question}{market.window && <span> · Window {market.window}</span>}</p>}
-        <OutcomeRows outcomes={market.outcomes} marketTitle={market.title} />
+        <OutcomeRows outcomes={market.outcomes} marketTitle={market.title} settled={market.status === "ended"} />
         <div className="market-hero-notes">
           <span>TxLINE-compatible score data</span>
           <span>Resolves from score data, not majority vote</span>
@@ -102,7 +102,9 @@ export function SoccerSpotlightCard({ market }: { market: MarketplaceMarket }) {
     <div>
       {market.status === "live"
         ? <p><span className="market-live-meta-inline"><LiveBadge /><span>{market.clock}</span></span><strong>{market.score}</strong></p>
-        : market.countdown && <p><CountdownBadge value={market.countdown} target={market.kickoff} /></p>}
+        : market.status === "ended"
+          ? <p><EndedBadge market={market} /></p>
+          : market.countdown && <p><CountdownBadge value={market.countdown} target={market.kickoff} /></p>}
       <small><CircleDot size={12} aria-hidden="true" /> {market.competition}</small>
       <h3><Link href={market.href}>{market.title}</Link></h3>
       <small>{market.question}</small>

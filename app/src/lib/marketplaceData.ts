@@ -43,21 +43,20 @@ export const PRIMARY_MARKET_NAV = [
 
 export const SPORT_TABS = ["All markets", "Goals", "Totals", "Goal Gap", "Match Result", "Upcoming", "Settled"] as const;
 
-/* 2026 FIFA World Cup — the final is set (kick-offs converted from NPT to UTC).
+/* 2026 FIFA World Cup — tournament complete. Spain are world champions.
    Semi-final 1: France 0–2 Spain (FT Jul 13)
    Semi-final 2: England 1–2 Argentina (FT Jul 16)
    Third place:  France 4–6 England (FT Jul 19)
-   Final:        Spain vs Argentina — Jul 20 00:45 NPT → Jul 19 19:00 UTC */
+   Final:        Spain 1–0 Argentina (FT Jul 20) */
 export const KICKOFFS = {
   thirdPlace: "2026-07-18T21:00:00Z",
   final: "2026-07-19T19:00:00Z",
 } as const;
 
-export const NEXT_KICKOFF = {
-  title: "Spain vs Argentina",
-  label: "Final",
-  countdown: "0d : 13h : 59m : 0s",
-  kickoff: KICKOFFS.final,
+export const TOURNAMENT_RESULT = {
+  champion: "Spain",
+  headline: "Spain are 2026 World Champions",
+  detail: "Spain 1 – 0 Argentina · Final · Jul 20",
 } as const;
 
 export const FEATURED_MARKETS: MarketplaceMarket[] = [
@@ -66,18 +65,17 @@ export const FEATURED_MARKETS: MarketplaceMarket[] = [
     title: "Spain vs Argentina",
     competition: "World Cup 2026 · Final",
     sport: "Match Result",
-    status: "upcoming",
-    countdown: "3d : 13h : 59m : 0s",
-    kickoff: KICKOFFS.final,
-    question: "Who lifts the trophy? · Jul 20, 12:45 am NPT",
+    status: "ended",
+    score: "1 – 0",
+    endedAt: "Jul 20",
+    question: "Spain lift the trophy — settled from the final score",
     pool: "38.4 SOL pool",
-    combo: true,
     featured: true,
     href: "/world-cup",
-    tags: ["Upcoming", "World Cup", "Match Result"],
+    tags: ["Settled", "World Cup", "Match Result"],
     outcomes: [
-      { label: "Spain", symbol: "ESP", price: "$185", probability: 54 },
-      { label: "Argentina", symbol: "ARG", price: "$217", probability: 46 },
+      { label: "Spain", symbol: "ESP", price: "$100", probability: 100, won: true },
+      { label: "Argentina", symbol: "ARG", price: "$0", probability: 0 },
     ],
   },
   {
@@ -85,18 +83,17 @@ export const FEATURED_MARKETS: MarketplaceMarket[] = [
     title: "Who wins the World Cup?",
     competition: "FIFA World Cup 2026 · Outright",
     sport: "Match Result",
-    status: "upcoming",
-    countdown: "3d : 13h : 59m : 0s",
-    kickoff: KICKOFFS.final,
-    question: "The final is set — Spain vs Argentina · Jul 20",
+    status: "ended",
+    score: "1 – 0",
+    endedAt: "Jul 20",
+    question: "Spain are 2026 World Champions — beat Argentina 1–0 in the final",
     pool: "41.2 SOL pool",
-    combo: true,
     featured: true,
     href: "/world-cup",
-    tags: ["Upcoming", "World Cup", "Outright"],
+    tags: ["Settled", "World Cup", "Outright"],
     outcomes: [
-      { label: "Spain", symbol: "ESP", price: "$185", probability: 54 },
-      { label: "Argentina", symbol: "ARG", price: "$217", probability: 46 },
+      { label: "Spain", symbol: "ESP", price: "$100", probability: 100, won: true },
+      { label: "Argentina", symbol: "ARG", price: "$0", probability: 0 },
     ],
   },
   {
@@ -104,24 +101,24 @@ export const FEATURED_MARKETS: MarketplaceMarket[] = [
     title: "Final goes beyond 90 minutes?",
     competition: "World Cup 2026 · Final · Jul 20",
     sport: "Match Result",
-    status: "upcoming",
-    countdown: "3d : 13h : 59m : 0s",
-    kickoff: KICKOFFS.final,
-    question: "Extra time or penalties in Spain vs Argentina? · Jul 20, 12:45 am NPT",
+    status: "ended",
+    score: "1 – 0",
+    endedAt: "Jul 20",
+    question: "Spain vs Argentina finished 1–0 in regulation time",
     pool: "4.1 SOL pool",
     featured: true,
     href: "/world-cup",
-    tags: ["Upcoming", "World Cup", "Match Result"],
+    tags: ["Settled", "World Cup", "Match Result"],
     outcomes: [
-      { label: "Yes", symbol: "YES", price: "$294", probability: 34 },
-      { label: "No", symbol: "NO", price: "$152", probability: 66 },
+      { label: "Yes", symbol: "YES", price: "$0", probability: 0 },
+      { label: "No", symbol: "NO", price: "$100", probability: 100, won: true },
     ],
   },
 ];
 
 export const FEATURED_MARKET = FEATURED_MARKETS[0];
 
-/* No matches are being played right now — the next fixture is the final. */
+/* The tournament is complete — no more fixtures to play. */
 export const LIVE_MARKETS: MarketplaceMarket[] = [];
 
 export const SOCCER_SPOTLIGHT: MarketplaceMarket = {
@@ -129,37 +126,36 @@ export const SOCCER_SPOTLIGHT: MarketplaceMarket = {
   title: "Spain vs Argentina",
   competition: "World Cup 2026 · Final",
   sport: "Match Result",
-  status: "upcoming",
-  countdown: "3d : 13h : 59m : 0s",
-  kickoff: KICKOFFS.final,
-  question: "Who lifts the trophy?",
+  status: "ended",
+  score: "1 – 0",
+  endedAt: "Jul 20",
+  question: "Spain lift the trophy — 2026 World Champions",
   image: "/spotlight-esp-arg.webp",
   href: "/world-cup",
-  tags: ["Upcoming", "Match Result"],
+  tags: ["Settled", "Match Result"],
   outcomes: [
-    { label: "Spain", symbol: "ESP", price: "$185", probability: 54 },
-    { label: "Argentina", symbol: "ARG", price: "$217", probability: 46 },
+    { label: "Spain", symbol: "ESP", price: "$100", probability: 100, won: true },
+    { label: "Argentina", symbol: "ARG", price: "$0", probability: 0 },
   ],
 };
 
 export const SPORTS_MARKETS: MarketplaceMarket[] = [
-  /* ── Upcoming: the final ── */
+  /* ── Settled: the final (Spain 1–0 Argentina, Jul 20) ── */
   {
     id: "final-result",
     title: "Spain vs Argentina",
     competition: "World Cup 2026 · Final",
     sport: "Match Result",
-    status: "upcoming",
-    countdown: "3d : 13h : 59m : 0s",
-    kickoff: KICKOFFS.final,
+    status: "ended",
+    score: "1 – 0",
+    endedAt: "Jul 20",
     question: "Who wins the World Cup final?",
     pool: "16.8 SOL",
-    combo: true,
     href: "/world-cup",
-    tags: ["Upcoming", "Match Result"],
+    tags: ["Settled", "Match Result"],
     outcomes: [
-      { label: "Spain", symbol: "ESP", price: "$185", probability: 54 },
-      { label: "Argentina", symbol: "ARG", price: "$217", probability: 46 },
+      { label: "Spain", symbol: "ESP", price: "$100", probability: 100, won: true },
+      { label: "Argentina", symbol: "ARG", price: "$0", probability: 0 },
     ],
   },
   {
@@ -167,15 +163,15 @@ export const SPORTS_MARKETS: MarketplaceMarket[] = [
     title: "Over 2.5 goals — Spain vs Argentina",
     competition: "World Cup 2026 · Final",
     sport: "Totals",
-    status: "upcoming",
-    countdown: "3d : 13h : 59m : 0s",
-    kickoff: KICKOFFS.final,
+    status: "ended",
+    score: "1 – 0",
+    endedAt: "Jul 20",
     pool: "5.2 SOL",
     href: "/world-cup",
-    tags: ["Upcoming", "Totals", "Goals"],
+    tags: ["Settled", "Totals", "Goals"],
     outcomes: [
-      { label: "Over 2.5 goals", symbol: "OVR", price: "$213", probability: 47 },
-      { label: "Under 2.5 goals", symbol: "UND", price: "$189", probability: 53 },
+      { label: "Over 2.5 goals", symbol: "OVR", price: "$0", probability: 0 },
+      { label: "Under 2.5 goals", symbol: "UND", price: "$100", probability: 100, won: true },
     ],
   },
   {
@@ -183,16 +179,15 @@ export const SPORTS_MARKETS: MarketplaceMarket[] = [
     title: "Both teams to score — Spain vs Argentina",
     competition: "World Cup 2026 · Final",
     sport: "Goals",
-    status: "upcoming",
-    countdown: "3d : 13h : 59m : 0s",
-    kickoff: KICKOFFS.final,
+    status: "ended",
+    score: "1 – 0",
+    endedAt: "Jul 20",
     pool: "4.6 SOL",
-    combo: true,
     href: "/world-cup",
-    tags: ["Upcoming", "Goals"],
+    tags: ["Settled", "Goals"],
     outcomes: [
-      { label: "Yes", symbol: "YES", price: "$179", probability: 56 },
-      { label: "No", symbol: "NO", price: "$227", probability: 44 },
+      { label: "Yes", symbol: "YES", price: "$0", probability: 0 },
+      { label: "No", symbol: "NO", price: "$100", probability: 100, won: true },
     ],
   },
   {
@@ -200,16 +195,16 @@ export const SPORTS_MARKETS: MarketplaceMarket[] = [
     title: "Final goes beyond 90 minutes?",
     competition: "World Cup 2026 · Final · Jul 20",
     sport: "Match Result",
-    status: "upcoming",
-    countdown: "3d : 13h : 59m : 0s",
-    kickoff: KICKOFFS.final,
-    question: "Spain vs Argentina · Jul 20, 12:45 am NPT",
+    status: "ended",
+    score: "1 – 0",
+    endedAt: "Jul 20",
+    question: "Spain vs Argentina finished 1–0 in regulation time",
     pool: "4.1 SOL",
     href: "/world-cup",
-    tags: ["Upcoming", "Match Result"],
+    tags: ["Settled", "Match Result"],
     outcomes: [
-      { label: "Yes", symbol: "YES", price: "$294", probability: 34 },
-      { label: "No", symbol: "NO", price: "$152", probability: 66 },
+      { label: "Yes", symbol: "YES", price: "$0", probability: 0 },
+      { label: "No", symbol: "NO", price: "$100", probability: 100, won: true },
     ],
   },
   /* ── Settled: third place (France 4–6 England, Jul 19) ── */
